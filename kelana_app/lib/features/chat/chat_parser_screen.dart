@@ -57,8 +57,9 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
     if (_locationController.text != intent.location) {
       _locationController.text = intent.location;
     }
-    if (_budgetController.text != intent.budget.toString()) {
-      _budgetController.text = intent.budget.toString();
+    final budgetText = intent.budget > 0 ? intent.budget.toString() : '';
+    if (_budgetController.text != budgetText) {
+      _budgetController.text = budgetText;
     }
     if (_timeController.text != intent.dateTime) {
       _timeController.text = intent.dateTime;
@@ -158,14 +159,49 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
     }
   }
 
+  Widget _buildChatMessage(Map<String, String> message) {
+    final isUser = message['role'] == 'user';
+    return Align(
+      alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: EdgeInsets.only(
+          left: isUser ? 40 : 0,
+          right: isUser ? 0 : 40,
+          bottom: 12,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isUser ? AppColors.primary : Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: const Radius.circular(16),
+            bottomLeft: Radius.circular(isUser ? 16 : 0),
+            bottomRight: Radius.circular(isUser ? 0 : 16),
+          ),
+          border: isUser ? null : Border.all(color: AppColors.border),
+        ),
+        child: Text(
+          message['text'] ?? '',
+          style: TextStyle(
+            color: isUser ? Colors.white : AppColors.textPrimary,
+            fontSize: 14,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final tripState = ref.watch(tripCreationProvider);
     final intent = tripState.parsedIntent;
 
-    if (intent != null && _locationController.text.isEmpty) {
-      _syncIntentToControllers(intent);
-    }
+    ref.listen(tripCreationProvider, (previous, next) {
+      if (next.parsedIntent != null &&
+          next.parsedIntent != previous?.parsedIntent) {
+        _syncIntentToControllers(next.parsedIntent!);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
@@ -183,29 +219,7 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. User Chat Bubble
-                  if (tripState.rawQuery.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        margin: const EdgeInsets.only(left: 40, bottom: 16),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
-                        decoration: const BoxDecoration(
-                          color: AppColors.primary,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(16),
-                            bottomLeft: Radius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          tripState.rawQuery,
-                          style: const TextStyle(
-                              color: Colors.white, fontSize: 14),
-                        ),
-                      ),
-                    ),
+                  ...tripState.conversationHistory.map(_buildChatMessage),
 
                   // 2. AI Loading State
                   if (tripState.isLoading)
@@ -294,12 +308,12 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Row(
+                            Row(
                               children: [
-                                Icon(Icons.check_circle_outline,
+                                const Icon(Icons.check_circle_outline,
                                     color: AppColors.primary),
-                                SizedBox(width: 8),
-                                Text(
+                                const SizedBox(width: 8),
+                                const Text(
                                   'Konfirmasi Rencana Perjalanan',
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,

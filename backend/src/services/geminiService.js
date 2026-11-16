@@ -1,7 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config, isGeminiAvailable } from '../config/env.js';
-import { estimateOsmBudget, getTripBudgetContext } from './budgetService.js';
-import { geminiIntentResponseSchema, geminiItineraryResponseSchema } from '../schemas/intentSchema.js';
+import { geminiIntentResponseSchema } from '../schemas/intentSchema.js';
 
 const GEMINI_MODEL_FALLBACKS = ['gemini-3.1-flash-lite', 'gemini-3.6-flash'];
 
@@ -17,9 +16,9 @@ function parseNumberWord(value) {
   return Number.parseInt(value, 10) || numberWords[value.toLowerCase()] || 0;
 }
 
-async function generateWithTransientRetry(model, content) {
+async function sendChatWithTransientRetry(chat, message) {
   try {
-    return await model.generateContent(content);
+    return await chat.sendMessage(message);
   } catch (error) {
     const status = Number(error?.status || error?.response?.status);
     const transientStatus = [429, 500, 502, 503, 504].includes(status) ||
@@ -27,7 +26,7 @@ async function generateWithTransientRetry(model, content) {
     if (!transientStatus) throw error;
 
     await new Promise(resolve => setTimeout(resolve, 700));
-    return model.generateContent(content);
+    return chat.sendMessage(message);
   }
 }
 
@@ -107,9 +106,19 @@ export function heuristicParseIntent(rawQuery) {
       if (destinationMatch) location = titleCase(destinationMatch[1].trim());
     }
 
+  const vagueDestinations = new Set([
+    'dalam negeri',
+    'luar negeri',
+    'mana saja',
+    'mana aja',
+    'tempat bagus',
+    'tempat wisata',
+  ]);
+  if (vagueDestinations.has(location.toLowerCase())) location = '';
+
   // 2. Detect budget
-  let budget = 100000;
-  let budgetLevel = "budget";
+  let budget = 0;
+  let budgetLevel = "unspecified";
   const budgetKMatch = query.match(/(\d+)\s*(?:rb|ribu|k)\b/);
   const budgetFullMatch = query.match(/(?:rp|budget|biaya|uang)?\s*(\d{4,9})\b/);
   const budgetJtMatch = query.match(/(\d+)\s*(?:jt|juta)\b/);
@@ -122,7 +131,8 @@ export function heuristicParseIntent(rawQuery) {
     budget = parseInt(budgetFullMatch[1], 10);
   }
 
-  if (budget > 1000000) budgetLevel = "luxury";
+  if (budget === 0) budgetLevel = "unspecified";
+  else if (budget > 1000000) budgetLevel = "luxury";
   else if (budget > 300000) budgetLevel = "moderate";
   else budgetLevel = "budget";
 
@@ -146,10 +156,6 @@ export function heuristicParseIntent(rawQuery) {
   if (query.includes("foto") || query.includes("estetik") || query.includes("instagrammable") || query.includes("hidden gem")) {
     categories.push("Spot Foto & Estetik");
   }
-  if (categories.length === 0) {
-    categories.push("Wisata Populer", "Kuliner");
-  }
-
   // Preserve explicit dates and durations so a failed Gemini request remains useful.
   const monthNames = 'januari|februari|maret|april|mei|juni|juli|agustus|september|oktober|november|desember';
   const explicitDate = query.match(
@@ -207,8 +213,15 @@ export function heuristicParseIntent(rawQuery) {
     dateTime,
     peopleCount,
     userNotes: location
-      ? `Permintaan perjalanan ke ${location} dengan fokus ${categories.join(', ')} dan estimasi budget Rp ${budget.toLocaleString('id-ID')}.`
-      : `Rencana perjalanan dengan fokus ${categories.join(', ')} dan estimasi budget Rp ${budget.toLocaleString('id-ID')}.`,
+      ? [
+          `Permintaan perjalanan ke ${location}`,
+          categories.length ? `dengan fokus ${categories.join(', ')}` : '',
+          budget > 0 ? `dan budget Rp ${budget.toLocaleString('id-ID')}` : '',
+        ].filter(Boolean).join(' ')
+      : 'Halo! Hari ini kita mau merencanakan liburan ke mana nih? Yuk, beri tahu aku kota atau destinasi tujuanmu!',
+    chat_response: location
+      ? `Aku menangkap tujuan perjalananmu ke ${location}.${budget > 0 ? ` Budget yang disebutkan Rp ${budget.toLocaleString('id-ID')}.` : ''} Ada detail lain yang ingin ditambahkan?`
+      : 'Halo! Hari ini kita mau merencanakan liburan ke mana nih? Yuk, beri tahu aku kota atau destinasi tujuanmu!',
   };
 }
 

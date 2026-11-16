@@ -34,7 +34,7 @@ class ParsedIntent {
       categories: (json['categories'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
-          ['Wisata', 'Kuliner'],
+          [],
       dateTime: json['dateTime'] as String? ?? 'Belum ditentukan',
       peopleCount: (json['peopleCount'] as num?)?.toInt() ?? 1,
       userNotes: json['userNotes'] as String? ?? '',
