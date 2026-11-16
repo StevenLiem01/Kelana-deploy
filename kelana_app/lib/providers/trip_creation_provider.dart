@@ -42,13 +42,13 @@ class TripCreationState {
     List<Place>? recommendedPlaces,
     List<Place>? selectedPlaces,
     Itinerary? builtItinerary,
+    bool clearParsedIntent = false,
   }) {
     return TripCreationState(
       isLoading: isLoading ?? this.isLoading,
       loadingMessage: loadingMessage,
       errorMessage: errorMessage,
       rawQuery: rawQuery ?? this.rawQuery,
-      conversationHistory: conversationHistory ?? this.conversationHistory,
       parsedIntent:
           clearParsedIntent ? null : parsedIntent ?? this.parsedIntent,
       recommendedPlaces: recommendedPlaces ?? this.recommendedPlaces,
@@ -67,41 +67,19 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
   Future<bool> submitPrompt(String query) async {
     if (query.trim().isEmpty) return false;
 
-    final previousHistory = state.conversationHistory;
-    final localResponse = _apiClient.handleLocalChitChat(query);
-    if (localResponse != null) {
-      state = state.copyWith(
-        rawQuery: query,
-        conversationHistory: _appendConversationTurn(
-          previousHistory,
-          query,
-          localResponse,
-        ),
-        isLoading: false,
-        loadingMessage: null,
-        errorMessage: null,
-        clearParsedIntent: true,
-      );
-      return true;
-    }
-
-    final pendingHistory = _trimConversationHistory([
-      ...previousHistory,
-      {'role': 'user', 'text': query},
-    ]);
+    final previousIntent = state.parsedIntent;
     state = state.copyWith(
       isLoading: true,
-      loadingMessage: 'Gemini sedang memahami rencana perjalanan Anda...',
+      loadingMessage: 'Kelana sedang memahami pesan Anda...',
       errorMessage: null,
       rawQuery: query,
-      conversationHistory: pendingHistory,
       clearParsedIntent: true,
     );
 
     try {
       final intent = await _apiClient.parseIntent(
         query,
-        history: previousHistory,
+        preferences: previousIntent?.toJson(),
       );
       state = state.copyWith(
         isLoading: false,
@@ -176,7 +154,9 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
   /// Step 2: Search places from Places API / Datasets based on confirmed intent
   Future<bool> fetchPlacesForIntent() async {
     final intent = state.parsedIntent;
-    if (intent == null) return false;
+    if (intent == null || intent.location.trim().isEmpty) {
+      return false;
+    }
 
     state = state.copyWith(
       isLoading: true,

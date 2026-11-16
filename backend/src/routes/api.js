@@ -68,6 +68,18 @@ router.post('/parse-intent', requireAuth, async (req, res) => {
       history,
     );
 
+    const destination = parsedIntent.location ?? parsedIntent.destination;
+    if (
+      typeof destination !== 'string' ||
+      destination.trim().length === 0 ||
+      destination.toLowerCase().includes('belum ditentukan')
+    ) {
+      return res.status(200).json({
+        success: true,
+        data: parsedIntent
+      });
+    }
+
     return res.json({
       success: true,
       data: parsedIntent

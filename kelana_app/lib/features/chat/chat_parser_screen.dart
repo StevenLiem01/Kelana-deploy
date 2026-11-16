@@ -117,6 +117,9 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
     ).format((budget * percent / 100).round());
   }
 
+  bool _hasDestination(ParsedIntent? intent) =>
+      intent != null && intent.location.trim().isNotEmpty;
+
   void _confirmAndProceed() async {
     final tripNotifier = ref.read(tripCreationProvider.notifier);
     final currentIntent = ref.read(tripCreationProvider).parsedIntent;
@@ -267,9 +270,32 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
                     ),
 
                   // 4. Gemini Structured Output Confirmation Card
-                  if (intent != null &&
-                      intent.location.isNotEmpty &&
-                      !tripState.isLoading) ...[
+                  if (intent?.chatResponse != null &&
+                      !_hasDestination(intent) &&
+                      !tripState.isLoading)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.only(right: 40, bottom: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
+                          ),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Text(
+                          intent!.chatResponse!,
+                          style: const TextStyle(
+                              color: AppColors.textPrimary, fontSize: 14),
+                        ),
+                      ),
+                    )
+                  else if (_hasDestination(intent) && !tripState.isLoading) ...[
                     Card(
                       elevation: 2,
                       shape: RoundedRectangleBorder(
@@ -513,7 +539,7 @@ class _ChatParserScreenState extends ConsumerState<ChatParserScreen> {
                   child: TextField(
                     controller: _chatInputController,
                     decoration: const InputDecoration(
-                      hintText: 'Ketik revisi (misal: ganti ke Jogja 150rb)...',
+                      hintText: 'Ngobrol atau ceritakan tujuan perjalanan...',
                       isDense: true,
                       contentPadding:
                           EdgeInsets.symmetric(horizontal: 14, vertical: 12),

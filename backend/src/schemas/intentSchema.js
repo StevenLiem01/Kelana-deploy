@@ -48,9 +48,13 @@ export const geminiIntentResponseSchema = {
     userNotes: {
       type: "STRING",
       description: "Ringkasan preferensi khusus user atau catatan tambahan dalam Bahasa Indonesia yang ramah."
+    },
+    chat_response: {
+      type: "STRING",
+      description: "Balasan percakapan alami dan bervariasi dari asisten untuk pesan terbaru pengguna."
     }
   },
-  required: ["chat_response"]
+  required: ["location", "categories", "dateTime", "chat_response"]
 };
 
 /**

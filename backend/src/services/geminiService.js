@@ -2,6 +2,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config, isGeminiAvailable } from '../config/env.js';
 import { geminiIntentResponseSchema } from '../schemas/intentSchema.js';
 
+const GEMINI_MODEL_FALLBACKS = ['gemini-3.1-flash-lite', 'gemini-3.6-flash'];
+
 function titleCase(value) {
   return value.replace(/\b\p{L}/gu, letter => letter.toUpperCase());
 }
@@ -25,6 +27,54 @@ async function sendChatWithTransientRetry(chat, message) {
 
     await new Promise(resolve => setTimeout(resolve, 700));
     return chat.sendMessage(message);
+  }
+}
+
+async function generateWithTimeout(model, content, timeoutMs = 30000) {
+  let timeoutId;
+  try {
+    return await Promise.race([
+      generateWithTransientRetry(model, content),
+      new Promise((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`Gemini request timed out after ${timeoutMs}ms`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function generateWithAvailableModel(content, generationConfig, timeoutMs = 12000) {
+  let lastError;
+  for (const modelName of GEMINI_MODEL_FALLBACKS) {
+    const model = new GoogleGenerativeAI(config.geminiApiKey).getGenerativeModel({
+      model: modelName,
+      generationConfig,
+    });
+    try {
+      return await generateWithTimeout(model, content, timeoutMs);
+    } catch (error) {
+      lastError = error;
+      console.warn(`[GeminiService] ${modelName} failed; trying next model: ${error.message}`);
+    }
+  }
+  throw lastError;
+}
+
+export function parseGeminiIntentResponse(rawText) {
+  try {
+    const cleanText = rawText.replace(/```json|```/gi, '').trim();
+    return JSON.parse(cleanText);
+  } catch (parseError) {
+    console.log('[GeminiService] Gemini returned plain text; using chat fallback.', parseError.message);
+    return {
+      chat_response: rawText,
+      destination: null,
+      budget: 0,
+    };
   }
 }
 
@@ -175,113 +225,373 @@ export function heuristicParseIntent(rawQuery) {
   };
 }
 
-export function mergeConversationIntent(rawQuery, history = []) {
-  const messages = history
-    .filter(message => message.role === 'user')
-    .map(message => message.parts.map(part => part.text || '').join(''))
-    .concat(String(rawQuery || ''));
-  const merged = {
-    location: '',
-    budget: 0,
-    budgetLevel: 'unspecified',
-    foodBudgetPercent: 50,
-    accommodationBudgetPercent: 20,
-    categories: [],
-    dateTime: 'Belum ditentukan',
-    peopleCount: 1,
-    userNotes: '',
-  };
-
-  for (const message of messages) {
-    const parsed = heuristicParseIntent(message);
-    if (parsed.location) merged.location = parsed.location;
-    if (parsed.budget > 0) {
-      merged.budget = parsed.budget;
-      merged.budgetLevel = parsed.budgetLevel;
-    }
-    if (parsed.categories.length > 0) merged.categories = parsed.categories;
-    if (parsed.dateTime !== 'Belum ditentukan') merged.dateTime = parsed.dateTime;
-    if (parsed.peopleCount > 1) merged.peopleCount = parsed.peopleCount;
+async function generateConversationalResponse(rawQuery, intentData, userPreferences) {
+  if (config.mockMode === 'always' || !isGeminiAvailable()) {
+    throw new Error('Gemini is required for chat responses but is unavailable.');
   }
 
-  merged.userNotes = merged.location
-    ? `Rencana perjalanan ke ${merged.location}.`
-    : 'Halo! Hari ini kita mau merencanakan liburan ke mana nih? Yuk, beri tahu aku kota atau destinasi tujuanmu!';
-  merged.chat_response = merged.location
-    ? `Aku menangkap tujuan perjalananmu ke ${merged.location}.${merged.budget > 0 ? ` Budget yang disebutkan Rp ${merged.budget.toLocaleString('id-ID')}.` : ''} Ada detail lain yang ingin ditambahkan?`
-    : `${merged.budget > 0 ? `Budget Rp ${merged.budget.toLocaleString('id-ID')} sudah dicatat. ` : ''}Hari ini kita mau merencanakan liburan ke kota atau destinasi mana?`;
-  return merged;
+  try {
+    const generationConfig = {
+        responseMimeType: 'application/json',
+        thinkingConfig: { thinkingLevel: 'low' },
+      };
+    const conversationContext = {
+      location: userPreferences.location || intentData.location || '',
+      budget: userPreferences.budget || intentData.budget || 0,
+      dateTime: userPreferences.dateTime || intentData.dateTime || 'Belum ditentukan',
+      peopleCount: userPreferences.peopleCount || intentData.peopleCount || 1,
+      categories: userPreferences.categories || intentData.categories || [],
+    };
+    const prompt = `Balas pesan terbaru pengguna sebagai Kelana, asisten perjalanan yang ramah. Gunakan Bahasa Indonesia yang alami dan bervariasi, bukan template. Pahami pesan berdasarkan konteks. Jangan mengarang detail perjalanan dan jangan membuat itinerary. Jika destinasi belum diketahui, tanyakan destinasi dengan santai. Jika destinasi sudah diketahui, jangan tanyakan detail tambahan; tanggapi singkat dan arahkan pengguna untuk melanjutkan ke pilihan rekomendasi perjalanan. Kembalikan JSON valid dengan satu properti string: {"chat_response":"..."}.\nKonteks: ${JSON.stringify(conversationContext)}\nPesan terbaru: ${JSON.stringify(rawQuery)}`;
+    const result = await generateWithAvailableModel(prompt, generationConfig);
+    const parsed = parseGeminiIntentResponse(result.response.text().trim());
+    const chatResponse = String(parsed.chat_response || '').trim();
+    if (!chatResponse) {
+      throw new Error('Gemini returned no chat_response for the conversation.');
+    }
+    return { ...intentData, chat_response: chatResponse };
+  } catch (error) {
+    console.error('[GeminiService] Error generating conversational response:', error.message);
+    throw error;
+  }
 }
 
 /**
  * Parse user prompt into structured travel intent using Gemini API
  */
-export async function parseUserIntent(rawQuery, userPreferences = {}, history = []) {
-  const fallbackIntent = mergeConversationIntent(rawQuery, history);
-  // If in pure mock mode or Gemini key is missing, use intelligent heuristic parser
-  if (config.mockMode === 'always' || !isGeminiAvailable()) {
-    console.log('[GeminiService] Using heuristic fallback for intent parsing');
+export async function parseUserIntent(rawQuery, userPreferences = {}) {
+  const extractedIntent = heuristicParseIntent(rawQuery);
+  const previousLocation = String(userPreferences.location || '').trim();
+  const location = extractedIntent.location || previousLocation;
+  const hasExplicitBudget = /(?:\brp\b|\bbudget\b|\bbiaya\b)?\s*\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b|\b(?:rp|budget|biaya)\s*\d{4,9}\b/i
+    .test(rawQuery);
+  const hasExplicitDate = extractedIntent.dateTime !== 'Belum ditentukan';
+  const previousBudget = Number(userPreferences.budget) || 0;
+  const previousDateTime = String(userPreferences.dateTime || '').trim();
+  const fallbackIntent = {
+    ...extractedIntent,
+    location,
+    budget: hasExplicitBudget
+      ? extractedIntent.budget
+      : previousBudget || 0,
+    budgetLevel: hasExplicitBudget
+      ? extractedIntent.budgetLevel
+      : previousBudget
+        ? userPreferences.budgetLevel || extractedIntent.budgetLevel
+        : 'unspecified',
+    dateTime: hasExplicitDate
+      ? extractedIntent.dateTime
+      : previousDateTime || 'Belum ditentukan',
+    categories: extractedIntent.categories,
+  };
+
+  if (!location) {
+    return generateConversationalResponse(rawQuery, fallbackIntent, userPreferences);
+  }
+
+  const missingBudget = fallbackIntent.budget <= 0;
+  const missingDate = fallbackIntent.dateTime === 'Belum ditentukan';
+  if (missingBudget || missingDate) {
+    return generateConversationalResponse(rawQuery, fallbackIntent, userPreferences);
+  }
+
+  if (!extractedIntent.location) {
     return fallbackIntent;
   }
 
+  // If in pure mock mode or Gemini key is missing, use intelligent heuristic parser
+  if (config.mockMode === 'always' || !isGeminiAvailable()) {
+    throw new Error('Gemini is required for chat responses but is unavailable.');
+  }
+
   try {
-    const model = new GoogleGenerativeAI(config.geminiApiKey).getGenerativeModel({
-      model: "gemini-3.8-flash",
-      systemInstruction: `
-Anda adalah Kelana, asisten perencana itinerary liburan yang ramah dan interaktif.
-Bantu pengguna menyusun rencana perjalanan bersama OpenStreetMap.
-
-Aturan perilaku yang wajib dipatuhi:
-1. Selalu isi "chat_response" dengan balasan percakapan yang ramah, termasuk sapaan,
-   pertanyaan klarifikasi, atau ringkasan singkat informasi terbaru.
-2. Jika pengguna hanya berbasa-basi atau belum menyebut kota/destinasi yang jelas,
-   jangan membuat itinerary dan tanyakan kota/destinasi. Jangan mengarang lokasi.
-3. Isi lokasi, budget, kategori, waktu, dan jumlah orang hanya dari informasi eksplisit
-   dalam percakapan saat ini atau riwayatnya. Jangan mengisi budget/kategori default.
-   Gunakan budget 0, tingkat "unspecified", alokasi 0, dan categories [] bila belum disebut.
-4. Pertahankan informasi sebelumnya yang masih relevan. Jika pengguna mengoreksi budget
-   atau preferensi, gunakan informasi terbaru yang eksplisit.
-5. Keluarkan hanya JSON yang cocok dengan schema intent.
-
-Format JSON:
-{
-  "chat_response": "string",
-  "location": "string",
-  "budget": 0,
-  "budgetLevel": "budget | moderate | luxury | unspecified",
-  "foodBudgetPercent": 0,
-  "accommodationBudgetPercent": 0,
-  "categories": [],
-  "dateTime": "Belum ditentukan",
-  "peopleCount": 1,
-  "userNotes": "string"
-}
-      `,
-      generationConfig: {
+    const generationConfig = {
         responseMimeType: "application/json",
-        responseSchema: geminiIntentResponseSchema,
-        temperature: 0.2,
-      }
-    });
+        thinkingConfig: { thinkingLevel: 'low' },
+      };
+
+    const systemPrompt = `
+Anda adalah asisten perencana perjalanan (itinerary planner) cerdas bernama Kelana.
+Tugas Anda adalah mengekstrak niat perjalanan user dari teks percakapan bebas ke dalam format JSON terstruktur.
+
+Aturan Ekstraksi:
+- "location": Nama destinasi yang benar-benar disebut user. Jangan pernah mengasumsikan Semarang atau kota lain; gunakan string kosong bila tidak ada lokasi.
+- "budget": Total estimasi budget perjalanan dalam Rupiah (angka murni integer tanpa format). Jika user menyebut "100rb" maka isi 100000. Jika tidak disebutkan sama sekali, beri estimasi logis sesuai konteks.
+- "budgetLevel": Salah satu dari: "budget", "moderate", "luxury", "unspecified".
+- "foodBudgetPercent": Persentase budget total untuk makan, default 50.
+- "accommodationBudgetPercent": Persentase budget total untuk akomodasi, default 20; gabungan kedua alokasi tidak boleh lebih dari 100.
+- "categories": Array of strings berisi kategori minat (misal: ["Kuliner", "Wisata Sejarah", "Alam", "Belanja"]).
+- "dateTime": Tanggal/waktu/durasi yang benar-benar disebut user. Jangan mengasumsikan "Hari ini"; gunakan "Belum ditentukan" bila tidak disebut.
+- "peopleCount": Jumlah orang (integer, default 1).
+- "userNotes": Ringkasan ramah dalam Bahasa Indonesia mengenai apa yang diinginkan user.
+- "chat_response": Balasan percakapan yang alami dan bervariasi dalam Bahasa Indonesia. Tanggapi pesan terbaru, jangan gunakan kalimat template, dan jangan mengarang detail yang belum disebutkan.
+
+Format output HARUS selalu JSON valid yang cocok dengan skema berikut:
+{
+  "location": string,
+  "budget": number,
+  "budgetLevel": "budget" | "moderate" | "luxury" | "unspecified",
+  "foodBudgetPercent": number,
+  "accommodationBudgetPercent": number,
+  "categories": string[],
+  "dateTime": string,
+  "peopleCount": number,
+  "userNotes": string,
+  "chat_response": string
+}
+`;
 
     const userMessage = `
 Input User: "${rawQuery}"
 ${userPreferences && Object.keys(userPreferences).length > 0 ? `Preferensi Historis User: ${JSON.stringify(userPreferences)}` : ''}
     `;
 
-    const chat = model.startChat({ history });
-    const result = await sendChatWithTransientRetry(chat, userMessage);
-    const responseText = result.response.text();
-    const parsed = JSON.parse(responseText);
+    const result = await generateWithAvailableModel(
+      [systemPrompt, userMessage],
+      generationConfig,
+    );
+    const responseText = result.response.text().trim();
+    const parsed = parseGeminiIntentResponse(responseText);
+    if (parsed.destination === null && parsed.chat_response !== undefined) {
+      return parsed;
+    }
+
+    const chatResponse = String(parsed.chat_response || '').trim();
+    if (!chatResponse) {
+      throw new Error('Gemini returned no chat_response for the conversation.');
+    }
 
     return {
-      ...fallbackIntent,
-      userNotes: parsed.userNotes || fallbackIntent.userNotes,
-      chat_response: parsed.chat_response || fallbackIntent.chat_response,
+      location: fallbackIntent.location || (() => {
+        const parsedLocation = String(parsed.location || '').trim();
+        return parsedLocation.toLowerCase() === 'semarang' && !/\bsemarang\b/i.test(rawQuery)
+          ? ''
+          : parsedLocation;
+      })(),
+      budget: Number(parsed.budget) || 100000,
+      budgetLevel: parsed.budgetLevel || "budget",
+      foodBudgetPercent: Number(parsed.foodBudgetPercent) || 50,
+      accommodationBudgetPercent: Number(parsed.accommodationBudgetPercent) || 20,
+      categories: Array.isArray(parsed.categories) ? parsed.categories : ["Wisata", "Kuliner"],
+      dateTime: fallbackIntent.dateTime !== 'Belum ditentukan'
+        ? fallbackIntent.dateTime
+        : String(parsed.dateTime || 'Belum ditentukan').toLowerCase() === 'hari ini' &&
+            !/\b(?:hari ini|today)\b/i.test(rawQuery)
+          ? 'Belum ditentukan'
+          : String(parsed.dateTime || 'Belum ditentukan'),
+      peopleCount: Number(parsed.peopleCount) || 1,
+      userNotes: parsed.userNotes || "Rencana perjalanan terstruktur oleh Kelana.",
+      chat_response: chatResponse,
     };
   } catch (error) {
     console.error('[GeminiService] Error calling Gemini API:', error.message);
-    // Fallback to heuristic parser on any API failure (e.g. rate limit, network timeout)
-    return fallbackIntent;
+    throw error;
+  }
+}
+
+/**
+ * Optimize itinerary sequence and schedule using Gemini API
+ */
+export async function optimizeItinerary(places, intent = {}) {
+  if (!places || places.length === 0) {
+    return {
+      tripTitle: "Rencana Perjalanan",
+      summary: "Belum ada tempat yang dipilih.",
+      stops: []
+    };
+  }
+
+  const budgetContext = getTripBudgetContext(intent);
+  const budgetedPlaces = places.map(place => {
+    if (!place.osmKey && !place.osmValue) return place;
+    return {
+      ...place,
+      ...estimateOsmBudget({
+        osm_key: place.osmKey,
+        osm_value: place.osmValue,
+        cuisine: place.cuisine,
+        stars: place.stars,
+        fee: place.fee,
+      }, budgetContext.peopleCount, budgetContext.durationDays),
+    };
+  });
+  const fitStopsWithinBudget = stops => {
+    let estimatedTotal = 0;
+    const categoryTotals = { food: 0, accommodation: 0, other: 0 };
+    const categoryBudgets = {
+      food: budgetContext.foodBudget,
+      accommodation: budgetContext.accommodationBudget,
+      other: budgetContext.otherBudget,
+    };
+    return stops.flatMap(stop => {
+      const place = budgetedPlaces.find(candidate => candidate.placeId === stop.placeId);
+      if (!place) return [];
+
+      const costCeiling = Math.max(0, Number(
+        place.estimatedCostMax ?? place.estimatedPrice ?? 0,
+      ));
+      const budgetCategory = categoryTotals[place.budgetCategory] === undefined
+        ? 'other'
+        : place.budgetCategory;
+      if (
+        budgetContext.budget > 0 &&
+        (
+          estimatedTotal + costCeiling > budgetContext.budget ||
+          categoryTotals[budgetCategory] + costCeiling > categoryBudgets[budgetCategory]
+        )
+      ) {
+        return [];
+      }
+
+      estimatedTotal += costCeiling;
+      categoryTotals[budgetCategory] += costCeiling;
+      return [{
+        ...stop,
+        placeId: place.placeId,
+        name: place.name,
+        budgetCategory,
+        budgetTier: place.budgetTier || 'moderate',
+        estimatedCostMin: Number(place.estimatedCostMin ?? place.estimatedPrice ?? costCeiling),
+        estimatedCostMax: costCeiling,
+        estimatedCost: costCeiling,
+      }];
+    });
+  };
+
+  // Heuristic itinerary builder for fallback
+  const buildHeuristicItinerary = () => {
+    let currentHour = 9;
+    let currentMinute = 0;
+    
+    const stops = budgetedPlaces.map((place, idx) => {
+      const timeString = `${String(currentHour).padStart(2, '0')}:${String(currentMinute).padStart(2, '0')} WIB`;
+      const duration = place.category && place.category.toLowerCase().includes('kuliner') ? 45 : 75;
+      
+      // Advance clock for next stop: visit duration + 30 mins travel
+      currentMinute += duration + 30;
+      while (currentMinute >= 60) {
+        currentHour += 1;
+        currentMinute -= 60;
+      }
+
+      return {
+        placeId: place.placeId,
+        name: place.name,
+        order: idx + 1,
+        suggestedArrivalTime: timeString,
+        suggestedDurationMinutes: duration,
+        activityTip: `Nikmati suasana dan keunikan di ${place.name}.`,
+        estimatedCost: place.estimatedPrice || 0
+      };
+    });
+
+    const budgetGuardedStops = fitStopsWithinBudget(stops);
+    return {
+      tripTitle: `Jelajah ${intent.location || 'Kota'} yang Menyenangkan`,
+      summary: `Itinerary terstruktur mengunjungi ${budgetGuardedStops.length} dari ${budgetedPlaces.length} destinasi di ${intent.location || 'tujuan Anda'}. Biaya memakai batas atas estimasi tier OSM dan tidak mencakup transportasi.`,
+      stops: budgetGuardedStops,
+    };
+  };
+
+  if (config.mockMode === 'always' || !isGeminiAvailable()) {
+    console.log('[GeminiService] Using heuristic optimizer for itinerary build');
+    return buildHeuristicItinerary();
+  }
+
+  try {
+    const generationConfig = {
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: 'low' },
+      };
+
+    const prompt = `
+Anda adalah pemandu wisata ahli di Indonesia untuk aplikasi Kelana.
+Tugas Anda: Susun urutan kunjungan yang paling logis, efisien rutenya, dan menyenangkan untuk daftar tempat wisata berikut.
+
+Data Preferensi:
+- Lokasi: ${intent.location || 'Semarang'}
+- Budget total maksimum: Rp ${budgetContext.budget.toLocaleString('id-ID')}
+- Alokasi makan: ${budgetContext.foodBudgetPercent}% (maks. Rp ${budgetContext.foodBudget.toLocaleString('id-ID')})
+- Alokasi akomodasi: ${budgetContext.accommodationBudgetPercent}% (maks. Rp ${budgetContext.accommodationBudget.toLocaleString('id-ID')})
+- Sisa aktivitas: Rp ${budgetContext.otherBudget.toLocaleString('id-ID')}
+- Durasi: ${budgetContext.durationDays} hari; ${budgetContext.peopleCount} orang
+- Tier harian per orang: ${budgetContext.budgetLevel} (sekitar Rp ${Math.floor(budgetContext.dailyPerPersonBudget).toLocaleString('id-ID')})
+- Kategori: ${(intent.categories || []).join(', ')}
+- Waktu: ${intent.dateTime || 'Hari ini'}
+- Estimasi hanya batas tier berbasis tag OSM, bukan harga live; biaya transportasi tidak tersedia dan tidak termasuk.
+
+Daftar Tempat yang Dipilih User:
+${JSON.stringify(budgetedPlaces.map(p => ({
+  placeId: p.placeId,
+  name: p.name,
+  category: p.category,
+  lat: p.lat,
+  lng: p.lng,
+  osmTags: {
+    key: p.osmKey,
+    value: p.osmValue,
+    cuisine: p.cuisine,
+    stars: p.stars,
+    fee: p.fee,
+  },
+  budgetTier: p.budgetTier || 'moderate',
+  budgetCategory: p.budgetCategory || 'other',
+  estimatedCostRange: {
+    min: p.estimatedCostMin ?? p.estimatedPrice ?? 0,
+    max: p.estimatedCostMax ?? p.estimatedPrice ?? 0,
+  },
+  openingHours: p.openingHours
+})), null, 2)}
+
+Petunjuk Penyusunan:
+1. Mulai dari pagi sekitar pukul 08:30 atau 09:00 WIB.
+2. Tempat kuliner sebaiknya ditempatkan di waktu makan siang (12:00-13:30) atau makan sore/malam.
+3. Urutkan berdasarkan kedekatan koordinat geografis agar waktu di perjalanan minimal.
+4. Gunakan hanya tempat dan placeId yang diberikan.
+5. Jangan melampaui budget total atau alokasi kategori. Jumlahkan batas atas estimatedCostRange.max; batasi makan dan akomodasi pada alokasi masing-masing, serta semua stop pada budget total.
+6. Jangan mengarang harga aktual. Isi estimatedCost dengan batas atas tier OSM yang diberikan.
+7. Berikan tips aktivitas spesifik yang hemat biaya; tandai tempat gratis hanya jika tag OSM menyatakan fee=no.
+
+Format output HARUS JSON valid:
+{
+  "tripTitle": string,
+  "summary": string,
+  "stops": [
+    {
+      "placeId": string,
+      "name": string,
+      "order": number,
+      "suggestedArrivalTime": string,
+      "suggestedDurationMinutes": number,
+      "activityTip": string,
+      "estimatedCost": number
+    }
+  ]
+}
+`;
+
+    const result = await generateWithAvailableModel(prompt, generationConfig);
+    const text = result.response.text();
+    const parsed = JSON.parse(text);
+
+    const candidateStops = Array.isArray(parsed.stops)
+      ? parsed.stops
+      : buildHeuristicItinerary().stops;
+    const guardedStops = fitStopsWithinBudget(candidateStops);
+    const omittedStops = candidateStops.length - guardedStops.length;
+    return {
+      tripTitle: parsed.tripTitle || `Itinerary ${intent.location || 'Kelana'}`,
+      summary: [
+        parsed.summary || 'Rencana perjalanan optimal dengan rute efisien.',
+        omittedStops > 0
+          ? `${omittedStops} tempat dikeluarkan agar batas atas estimasi biaya tetap sesuai budget.`
+          : null,
+        'Estimasi berbasis tier OSM; biaya transportasi tidak termasuk.',
+      ].filter(Boolean).join(' '),
+      stops: guardedStops,
+    };
+  } catch (error) {
+    console.error('[GeminiService] Error optimizing itinerary with Gemini:', error.message);
+    return buildHeuristicItinerary();
   }
 }
