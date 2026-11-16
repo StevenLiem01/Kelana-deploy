@@ -16,9 +16,9 @@ function parseNumberWord(value) {
   return Number.parseInt(value, 10) || numberWords[value.toLowerCase()] || 0;
 }
 
-async function sendChatWithTransientRetry(chat, message) {
+async function generateWithTransientRetry(model, content) {
   try {
-    return await chat.sendMessage(message);
+    return await model.generateContent(content);
   } catch (error) {
     const status = Number(error?.status || error?.response?.status);
     const transientStatus = [429, 500, 502, 503, 504].includes(status) ||
@@ -26,7 +26,7 @@ async function sendChatWithTransientRetry(chat, message) {
     if (!transientStatus) throw error;
 
     await new Promise(resolve => setTimeout(resolve, 700));
-    return chat.sendMessage(message);
+    return model.generateContent(content);
   }
 }
 

@@ -106,17 +106,17 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
     }
   }
 
-  List<Map<String, String>> _appendConversationTurn(
-    List<Map<String, String>> history,
-    String query,
-    String response,
-  ) {
-    return _trimConversationHistory([
-      ...history,
-      {'role': 'user', 'text': query},
-      {'role': 'model', 'text': response},
-    ]);
-  }
+  // List> _appendConversationTurn(
+  //   List> history,
+  //   String query,
+  //   String response,
+  // ) {
+  //   return _trimConversationHistory([
+  //     ...history,
+  //     {'role': 'user', 'text': query},
+  //     {'role': 'model', 'text': response},
+  //   ]);
+  // }
 
   List<Map<String, String>> _appendAssistantResponse(
     List<Map<String, String>> history,
