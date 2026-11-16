@@ -42,7 +42,6 @@ class TripCreationState {
     List<Place>? recommendedPlaces,
     List<Place>? selectedPlaces,
     Itinerary? builtItinerary,
-    bool clearParsedIntent = false,
   }) {
     return TripCreationState(
       isLoading: isLoading ?? this.isLoading,
@@ -87,8 +86,8 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
         parsedIntent: intent,
         conversationHistory: _appendAssistantResponse(
           state.conversationHistory,
-          intent.chatResponse.isNotEmpty
-              ? intent.chatResponse
+          (intent.chatResponse != null && intent.chatResponse!.isNotEmpty)
+              ? intent.chatResponse!
               : intent.userNotes,
         ),
       );
