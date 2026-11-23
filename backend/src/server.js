@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { config, isGeminiAvailable, isPlacesAvailable, isDirectionsAvailable } from './config/env.js';
+import { config, isGeminiAvailable, isDirectionsAvailable } from './config/env.js';
 import apiRouter from './routes/api.js';
 
 const app = express();
@@ -52,8 +52,8 @@ app.get('/', (req, res) => {
           <span class="badge ${isGeminiAvailable() ? 'badge-green' : 'badge-yellow'}">
             Gemini AI: ${isGeminiAvailable() ? 'Aktif (Live API)' : 'Mock / Heuristic Fallback'}
           </span>
-          <span class="badge ${isPlacesAvailable() ? 'badge-green' : 'badge-yellow'}">
-            Places API: ${isPlacesAvailable() ? 'Aktif (Live API)' : 'Curated Datasets'}
+          <span class="badge badge-green">
+            Place Search: Photon (OpenStreetMap)
           </span>
           <span class="badge ${isDirectionsAvailable() ? 'badge-green' : 'badge-yellow'}">
             Directions API: ${isDirectionsAvailable() ? 'Aktif (Live API)' : 'Haversine Estimator'}
@@ -61,7 +61,7 @@ app.get('/', (req, res) => {
         </div>
         <h3>Tersedia Endpoints:</h3>
         <div class="endpoint"><code>POST /api/parse-intent</code> - NLU intent parsing (Gemini Structured Output)</div>
-        <div class="endpoint"><code>POST /api/search-places</code> - Rekomendasi tempat dari Places API / Datasets</div>
+        <div class="endpoint"><code>POST /api/search-places</code> - Rekomendasi tempat dari Photon / Datasets</div>
         <div class="endpoint"><code>POST /api/build-itinerary</code> - Optimasi urutan & rute perjalanan</div>
         <div class="endpoint"><code>GET /api/health</code> - Status kesehatan & konfigurasi server</div>
       </div>
@@ -84,12 +84,4 @@ app.use((err, req, res, next) => {
   });
 });
 
-const PORT = config.port;
-app.listen(PORT, () => {
-  console.log('====================================================');
-  console.log(`🧭 Kelana Backend Proxy is running on port ${PORT}`);
-  console.log(`📍 URL: http://localhost:${PORT}`);
-  console.log(`🔑 Gemini API: ${isGeminiAvailable() ? 'Configured ✅' : 'Missing (Smart Mock Mode enabled) ⚠️'}`);
-  console.log(`🗺️ Places API: ${isPlacesAvailable() ? 'Configured ✅' : 'Missing (Indonesian Datasets enabled) ⚠️'}`);
-  console.log('====================================================');
-});
+export default app;

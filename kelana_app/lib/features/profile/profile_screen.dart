@@ -77,7 +77,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         title: const Text('Profil & Pengaturan'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => context.pop(),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
         ),
       ),
       body: SingleChildScrollView(
@@ -159,7 +165,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 return FilterChip(
                   label: Text(cat),
                   selected: isSelected,
-                  selectedColor: AppColors.primary.withOpacity(0.18),
+                  selectedColor: AppColors.primary.withValues(alpha: 0.18),
                   checkmarkColor: AppColors.primary,
                   onSelected: (selected) {
                     setState(() {
@@ -216,7 +222,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'URL Server Backend (ubah jika menggunakan IP Wi-Fi untuk device fisik):',
+              'URL server atau endpoint Cloud Function (tanpa akhiran /api):',
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),
@@ -225,7 +231,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               controller: _urlController,
               decoration: const InputDecoration(
                 prefixIcon: Icon(Icons.link),
-                hintText: 'http://localhost:5000/api',
+                hintText: 'http://localhost:5000',
               ),
             ),
             const SizedBox(height: 10),

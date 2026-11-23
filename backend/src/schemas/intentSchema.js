@@ -5,25 +5,37 @@
 export const geminiIntentResponseSchema = {
   type: "OBJECT",
   properties: {
+    chat_response: {
+      type: "STRING",
+      description: "Balasan percakapan Kelana yang ramah, pertanyaan klarifikasi, atau ringkasan rencana."
+    },
     location: {
       type: "STRING",
-      description: "Kota atau destinasi utama yang ingin dikunjungi (contoh: Semarang, Yogyakarta, Bandung, Bali)."
+      description: "Kota atau destinasi yang disebut pengguna; jangan mengasumsikan jika tidak disebut."
     },
     budget: {
       type: "NUMBER",
-      description: "Total estimasi budget dalam mata uang Rupiah (angka murni tanpa titik/koma, contoh: 100000). Jika tidak disebutkan eksplisit, berikan estimasi yang wajar atau 0."
+      description: "Total budget dalam Rupiah (angka murni). Gunakan 0 jika pengguna tidak menyebutkan budget; jangan memperkirakannya."
     },
     budgetLevel: {
       type: "STRING",
       enum: ["budget", "moderate", "luxury", "unspecified"],
       description: "Tingkatan pengeluaran: budget (hemat), moderate (menengah), luxury (mewah)."
     },
+    foodBudgetPercent: {
+      type: "INTEGER",
+      description: "Persentase budget untuk makan. Gunakan 0 jika tidak disebutkan pengguna."
+    },
+    accommodationBudgetPercent: {
+      type: "INTEGER",
+      description: "Persentase budget untuk akomodasi. Gunakan 0 jika tidak disebutkan pengguna."
+    },
     categories: {
       type: "ARRAY",
       items: {
         type: "STRING"
       },
-      description: "Daftar kategori minat perjalanan (contoh: kuliner, wisata sejarah, alam, belanja, keluarga, hidden gem, religi)."
+      description: "Daftar kategori minat perjalanan yang disebut pengguna; gunakan array kosong jika tidak ada."
     },
     dateTime: {
       type: "STRING",
@@ -36,9 +48,13 @@ export const geminiIntentResponseSchema = {
     userNotes: {
       type: "STRING",
       description: "Ringkasan preferensi khusus user atau catatan tambahan dalam Bahasa Indonesia yang ramah."
+    },
+    chat_response: {
+      type: "STRING",
+      description: "Balasan percakapan alami dan bervariasi dari asisten untuk pesan terbaru pengguna."
     }
   },
-  required: ["location", "categories", "dateTime"]
+  required: ["location", "categories", "dateTime", "chat_response"]
 };
 
 /**

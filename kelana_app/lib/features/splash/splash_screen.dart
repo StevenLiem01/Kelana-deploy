@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +17,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late AnimationController _animController;
   late Animation<double> _scaleAnimation;
   late Animation<double> _fadeAnimation;
+  Timer? _navigationTimer;
 
   @override
   void initState() {
@@ -36,7 +38,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _animController.forward();
 
     // Navigate after splash
-    Future.delayed(const Duration(milliseconds: 2200), () {
+    _navigationTimer = Timer(const Duration(milliseconds: 2200), () {
       if (!mounted) return;
       final auth = ref.read(authProvider);
       if (auth.isAuthenticated) {
@@ -49,6 +51,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   void dispose() {
+    _navigationTimer?.cancel();
     _animController.dispose();
     super.dispose();
   }
@@ -79,29 +82,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      // Compass Icon Circle
+                      // Brand mark
                       Container(
-                        width: 96,
-                        height: 96,
+                        width: 104,
+                        height: 104,
+                        padding: const EdgeInsets.all(5),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.25),
-                            width: 2,
-                          ),
+                          color: AppColors.htmlSurfaceContainer,
+                          borderRadius: BorderRadius.circular(28),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
+                              color: Colors.black.withValues(alpha: 0.2),
                               blurRadius: 20,
                               offset: const Offset(0, 8),
                             ),
                           ],
                         ),
-                        child: const Icon(
-                          Icons.explore_rounded,
-                          size: 54,
-                          color: AppColors.secondary,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.asset(
+                            'assets/icons/logoonly2.png',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const ColoredBox(
+                              color: AppColors.htmlPrimaryContainer,
+                              child: Center(
+                                  child: Text('K',
+                                      style: TextStyle(
+                                          fontSize: 46,
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w800))),
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 24),
@@ -124,7 +135,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w400,
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -137,7 +148,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         child: CircularProgressIndicator(
                           strokeWidth: 2.5,
                           valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white.withOpacity(0.7),
+                            Colors.white.withValues(alpha: 0.7),
                           ),
                         ),
                       ),
