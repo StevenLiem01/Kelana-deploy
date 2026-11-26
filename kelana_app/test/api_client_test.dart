@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kelana_app/core/network/api_client.dart';
 import 'package:kelana_app/models/parsed_intent.dart';
@@ -64,6 +67,47 @@ void main() {
     });
   });
 
+  group('ApiClient.friendlyErrorMessage', () {
+    test('maps server validation, timeout, and network failures', () {
+      final requestOptions = RequestOptions(path: '/api/itineraries');
+
+      expect(
+        apiClient.friendlyErrorMessage(
+          DioException(
+            requestOptions: requestOptions,
+            response: Response(
+              requestOptions: requestOptions,
+              statusCode: 422,
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+          fallback: 'fallback',
+        ),
+        contains('Detail perjalanan'),
+      );
+      expect(
+        apiClient.friendlyErrorMessage(
+          DioException(
+            requestOptions: requestOptions,
+            type: DioExceptionType.connectionTimeout,
+          ),
+          fallback: 'fallback',
+        ),
+        contains('Koneksi terlalu lama'),
+      );
+      expect(
+        apiClient.friendlyErrorMessage(
+          DioException(
+            requestOptions: requestOptions,
+            type: DioExceptionType.connectionError,
+          ),
+          fallback: 'fallback',
+        ),
+        contains('Tidak dapat terhubung'),
+      );
+    });
+  });
+
   test('TripCreationNotifier responds to greetings without parsing intent',
       () async {
     final notifier = TripCreationNotifier(apiClient);
@@ -74,13 +118,13 @@ void main() {
     expect(notifier.state.rawQuery, 'hai');
     expect(notifier.state.conversationHistory, hasLength(2));
     expect(notifier.state.conversationHistory.last['text'],
-        startsWith('Hai juga!'));
+        contains('kota atau destinasi'));
     expect(notifier.state.parsedIntent, isNull);
     expect(notifier.state.isLoading, isFalse);
     notifier.dispose();
   });
 
-  test('provider carries local greeting history into the next intent request',
+  test('provider carries completed conversation turns into the next request',
       () async {
     final fakeClient = _FakeApiClient();
     final notifier = TripCreationNotifier(fakeClient);
@@ -94,8 +138,42 @@ void main() {
       'text': 'halo',
     });
     expect(fakeClient.receivedHistory[1]['role'], 'model');
-    expect(fakeClient.receivedHistory[1]['text'], startsWith('Hai!'));
+    expect(
+      fakeClient.receivedHistory[1]['text'],
+      startsWith('Budget Rp 100.000.000 tercatat.'),
+    );
     expect(notifier.state.parsedIntent?.budget, 100000000);
+    notifier.dispose();
+  });
+
+  test('provider rejects duplicate prompts and ignores results after reset',
+      () async {
+    final response = Completer<ParsedIntent>();
+    final fakeClient = _PendingApiClient(response.future);
+    final notifier = TripCreationNotifier(fakeClient);
+
+    final pendingRequest = notifier.submitPrompt('Mau ke Bali');
+    expect(await notifier.submitPrompt('Mau ke Tokyo'), isFalse);
+    expect(fakeClient.callCount, 1);
+
+    notifier.reset();
+    response.complete(
+      ParsedIntent(
+        location: 'Bali',
+        budget: 5000000,
+        budgetLevel: 'moderate',
+        categories: const [],
+        dateTime: '3 hari',
+        peopleCount: 1,
+        userNotes: 'Perjalanan ke Bali',
+        chatResponse: 'Baik, rencana ke Bali.',
+      ),
+    );
+
+    expect(await pendingRequest, isFalse);
+    expect(notifier.state.rawQuery, isEmpty);
+    expect(notifier.state.conversationHistory, isEmpty);
+    expect(notifier.state.parsedIntent, isNull);
     notifier.dispose();
   });
 }
@@ -122,5 +200,23 @@ class _FakeApiClient extends ApiClient {
       userNotes: 'Masih perlu memilih kota.',
       chatResponse: 'Budget Rp 100.000.000 tercatat. Mau ke kota mana?',
     );
+  }
+}
+
+class _PendingApiClient extends ApiClient {
+  _PendingApiClient(this.response)
+      : super(customBaseUrl: 'http://127.0.0.1:1/');
+
+  final Future<ParsedIntent> response;
+  int callCount = 0;
+
+  @override
+  Future<ParsedIntent> parseIntent(
+    String query, {
+    Map<String, dynamic>? preferences,
+    List<Map<String, String>> history = const [],
+  }) {
+    callCount++;
+    return response;
   }
 }

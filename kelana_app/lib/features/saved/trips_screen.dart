@@ -79,7 +79,10 @@ class _TripsScreenState extends ConsumerState<TripsScreen> {
                   SizedBox(
                     height: 50,
                     child: FilledButton.icon(
-                      onPressed: () => context.go('/chat'),
+                      onPressed: () {
+                        ref.read(tripCreationProvider.notifier).reset();
+                        context.go('/chat');
+                      },
                       icon: const Icon(Icons.add, size: 20),
                       label: const Text('Buat Perjalanan Baru'),
                       style: FilledButton.styleFrom(

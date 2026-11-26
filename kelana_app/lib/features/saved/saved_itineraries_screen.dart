@@ -66,9 +66,22 @@ class _SavedItinerariesScreenState
                   final messenger = ScaffoldMessenger.of(this.context);
                   final found = await client.getSharedItinerary(code);
                   if (found != null && mounted) {
-                    ref
-                        .read(savedItinerariesProvider.notifier)
-                        .saveItinerary(found);
+                    try {
+                      await ref
+                          .read(savedItinerariesProvider.notifier)
+                          .saveItinerary(found);
+                    } catch (error) {
+                      if (!mounted) return;
+                      final message = client.friendlyErrorMessage(
+                        error,
+                        fallback: 'Itinerary gagal disinkronkan dengan server.',
+                      );
+                      messenger.showSnackBar(
+                        SnackBar(content: Text(message)),
+                      );
+                      return;
+                    }
+                    if (!mounted) return;
                     messenger.showSnackBar(
                       const SnackBar(
                           content: Text('Itinerary berhasil dimuat!')),

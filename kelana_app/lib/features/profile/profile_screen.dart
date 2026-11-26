@@ -53,6 +53,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     client.updateBaseUrl(_urlController.text.trim());
     final isHealthy = await client.checkHealth();
 
+    if (!mounted) return;
     setState(() {
       _isCheckingHealth = false;
       _healthResult = isHealthy

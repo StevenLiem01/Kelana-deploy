@@ -92,28 +92,40 @@ class _ItineraryDetailScreenState extends ConsumerState<ItineraryDetailScreen> {
     );
   }
 
-  void _handleSaveItinerary() async {
+  Future<void> _handleSaveItinerary() async {
     final itin = ref.read(tripCreationProvider).builtItinerary;
     if (itin == null) return;
 
-    await ref.read(savedItinerariesProvider.notifier).saveItinerary(itin);
+    try {
+      await ref.read(savedItinerariesProvider.notifier).saveItinerary(itin);
+    } catch (error) {
+      if (!mounted) return;
+      final message = ref.read(apiClientProvider).friendlyErrorMessage(
+            error,
+            fallback: 'Itinerary gagal disinkronkan dengan server.',
+          );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      return;
+    }
+
+    if (!mounted) return;
     setState(() {
       _isSaved = true;
     });
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Itinerary berhasil disimpan ke riwayat!'),
-          backgroundColor: AppColors.success,
-          action: SnackBarAction(
-            label: 'Lihat',
-            textColor: Colors.white,
-            onPressed: () => context.push('/saved'),
-          ),
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Itinerary berhasil disimpan ke riwayat!'),
+        backgroundColor: AppColors.success,
+        action: SnackBarAction(
+          label: 'Lihat',
+          textColor: Colors.white,
+          onPressed: () => context.push('/saved'),
         ),
-      );
-    }
+      ),
+    );
   }
 
   @override

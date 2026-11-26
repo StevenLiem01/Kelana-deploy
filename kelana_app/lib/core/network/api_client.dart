@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import '../constants/api_constants.dart';
 import '../../models/parsed_intent.dart';
 import '../../models/place.dart';
@@ -91,14 +92,46 @@ class ApiClient {
     _dio.interceptors.add(
       LogInterceptor(
         requestHeader: false,
-        requestBody: true,
-        responseBody: true,
+        requestBody: !kReleaseMode,
+        responseBody: !kReleaseMode,
         logPrint: (obj) => print('[DIO] $obj'),
       ),
     );
   }
 
   String get baseUrl => _baseUrl;
+
+  String friendlyErrorMessage(
+    Object error, {
+    required String fallback,
+  }) {
+    if (error is! DioException) return fallback;
+
+    final statusCode = error.response?.statusCode;
+    if (statusCode == 422) {
+      return 'Detail perjalanan belum sesuai. Periksa kembali destinasi, budget, dan waktu perjalanan.';
+    }
+    if (statusCode != null && statusCode >= 500) {
+      return 'Server sedang mengalami gangguan. Silakan coba beberapa saat lagi.';
+    }
+    if (statusCode == 401 || statusCode == 403) {
+      return 'Sesi Anda tidak valid. Silakan masuk kembali, lalu coba lagi.';
+    }
+    if (statusCode == 408 ||
+        error.type == DioExceptionType.connectionTimeout ||
+        error.type == DioExceptionType.sendTimeout ||
+        error.type == DioExceptionType.receiveTimeout) {
+      return 'Koneksi terlalu lama. Periksa jaringan Anda dan coba lagi.';
+    }
+    if (error.type == DioExceptionType.connectionError ||
+        (error.response == null && error.type == DioExceptionType.unknown)) {
+      return 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda.';
+    }
+    if (statusCode != null && statusCode >= 400) {
+      return 'Permintaan tidak dapat diproses. Periksa kembali detail perjalanan.';
+    }
+    return fallback;
+  }
 
   void updateBaseUrl(String newUrl) {
     _baseUrl = _normalizeBaseUrl(newUrl);
@@ -229,20 +262,14 @@ class ApiClient {
 
   /// 4. Save Itinerary
   Future<Itinerary> saveItinerary(Itinerary itinerary) async {
-    try {
-      final response = await _dio.post(
-        ApiConstants.itineraries,
-        data: itinerary.toJson(),
-      );
-      if (response.statusCode == 200 && response.data['success'] == true) {
-        return Itinerary.fromJson(
-            response.data['data'] as Map<String, dynamic>);
-      }
-      throw Exception(response.data['error'] ?? 'Gagal menyimpan itinerary.');
-    } catch (e) {
-      print('[ApiClient] Save itinerary failed, saving locally: $e');
-      return itinerary;
+    final response = await _dio.post(
+      ApiConstants.itineraries,
+      data: itinerary.toJson(),
+    );
+    if (response.statusCode == 200 && response.data['success'] == true) {
+      return Itinerary.fromJson(response.data['data'] as Map<String, dynamic>);
     }
+    throw Exception(response.data['error'] ?? 'Gagal menyimpan itinerary.');
   }
 
   Future<List<Itinerary>> getItineraries() async {

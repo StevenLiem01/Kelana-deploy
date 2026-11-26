@@ -48,6 +48,7 @@ class TripCreationState {
       loadingMessage: loadingMessage,
       errorMessage: errorMessage,
       rawQuery: rawQuery ?? this.rawQuery,
+      conversationHistory: conversationHistory ?? this.conversationHistory,
       parsedIntent:
           clearParsedIntent ? null : parsedIntent ?? this.parsedIntent,
       recommendedPlaces: recommendedPlaces ?? this.recommendedPlaces,
@@ -59,46 +60,64 @@ class TripCreationState {
 
 class TripCreationNotifier extends StateNotifier<TripCreationState> {
   final ApiClient _apiClient;
+  int _requestGeneration = 0;
 
   TripCreationNotifier(this._apiClient) : super(TripCreationState());
 
   /// Step 1: Submit raw query to Gemini via Backend Proxy
   Future<bool> submitPrompt(String query) async {
-    if (query.trim().isEmpty) return false;
+    final normalizedQuery = query.trim();
+    if (normalizedQuery.isEmpty || state.isLoading) return false;
 
     final previousIntent = state.parsedIntent;
+    final requestHistory = List<Map<String, String>>.of(
+      state.conversationHistory,
+    );
+    final requestGeneration = ++_requestGeneration;
     state = state.copyWith(
       isLoading: true,
       loadingMessage: 'Kelana sedang memahami pesan Anda...',
       errorMessage: null,
-      rawQuery: query,
+      rawQuery: normalizedQuery,
       clearParsedIntent: true,
     );
 
     try {
       final intent = await _apiClient.parseIntent(
-        query,
+        normalizedQuery,
         preferences: previousIntent?.toJson(),
+        history: requestHistory,
       );
+      if (requestGeneration != _requestGeneration) return false;
+
+      final response =
+          (intent.chatResponse != null && intent.chatResponse!.isNotEmpty)
+              ? intent.chatResponse!
+              : intent.userNotes;
       state = state.copyWith(
         isLoading: false,
         loadingMessage: null,
         parsedIntent: intent,
-        conversationHistory: _appendAssistantResponse(
-          state.conversationHistory,
-          (intent.chatResponse != null && intent.chatResponse!.isNotEmpty)
-              ? intent.chatResponse!
-              : intent.userNotes,
+        conversationHistory: _appendConversationTurn(
+          requestHistory,
+          normalizedQuery,
+          response,
         ),
       );
       return true;
-    } catch (e) {
+    } catch (error) {
+      if (requestGeneration != _requestGeneration) return false;
       state = state.copyWith(
         isLoading: false,
         loadingMessage: null,
-        errorMessage: 'Gagal menganalisis permintaan: ${e.toString()}',
-        conversationHistory: _appendAssistantResponse(
-          state.conversationHistory,
+        errorMessage: _apiClient.friendlyErrorMessage(
+          error,
+          fallback:
+              'Kelana belum dapat memahami permintaan Anda. Silakan coba lagi.',
+        ),
+        conversationHistory: _appendConversationTurn(
+          requestHistory,
+          normalizedQuery,
           'Maaf, terjadi gangguan saat memahami permintaan Anda. Silakan coba lagi.',
         ),
       );
@@ -106,24 +125,14 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
     }
   }
 
-  // List> _appendConversationTurn(
-  //   List> history,
-  //   String query,
-  //   String response,
-  // ) {
-  //   return _trimConversationHistory([
-  //     ...history,
-  //     {'role': 'user', 'text': query},
-  //     {'role': 'model', 'text': response},
-  //   ]);
-  // }
-
-  List<Map<String, String>> _appendAssistantResponse(
+  List<Map<String, String>> _appendConversationTurn(
     List<Map<String, String>> history,
+    String query,
     String response,
   ) {
     return _trimConversationHistory([
       ...history,
+      {'role': 'user', 'text': query},
       {'role': 'model', 'text': response},
     ]);
   }
@@ -152,11 +161,13 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
 
   /// Step 2: Search places from Places API / Datasets based on confirmed intent
   Future<bool> fetchPlacesForIntent() async {
+    if (state.isLoading) return false;
     final intent = state.parsedIntent;
     if (intent == null || intent.location.trim().isEmpty) {
       return false;
     }
 
+    final requestGeneration = ++_requestGeneration;
     state = state.copyWith(
       isLoading: true,
       loadingMessage: 'Mencari destinasi terbaik di ${intent.location}...',
@@ -165,6 +176,7 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
 
     try {
       final places = await _apiClient.searchPlaces(intent);
+      if (requestGeneration != _requestGeneration) return false;
       // Pre-select top 4 places by default
       final defaultSelected = places.take(4).toList();
 
@@ -175,11 +187,15 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
         selectedPlaces: defaultSelected,
       );
       return true;
-    } catch (e) {
+    } catch (error) {
+      if (requestGeneration != _requestGeneration) return false;
       state = state.copyWith(
         isLoading: false,
         loadingMessage: null,
-        errorMessage: 'Gagal mengambil rekomendasi tempat: ${e.toString()}',
+        errorMessage: _apiClient.friendlyErrorMessage(
+          error,
+          fallback: 'Rekomendasi tempat belum dapat dimuat. Silakan coba lagi.',
+        ),
       );
       return false;
     }
@@ -202,11 +218,15 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
 
   /// Step 3: Build a scheduled itinerary with Directions API
   Future<bool> buildItinerary() async {
+    if (state.isLoading) return false;
     if (state.selectedPlaces.isEmpty) {
       state = state.copyWith(errorMessage: 'Pilih minimal 1 tempat destinasi.');
       return false;
     }
 
+    final selectedPlaces = List<Place>.of(state.selectedPlaces);
+    final intent = state.parsedIntent;
+    final requestGeneration = ++_requestGeneration;
     state = state.copyWith(
       isLoading: true,
       loadingMessage: 'Menyusun urutan rute dan estimasi waktu perjalanan...',
@@ -215,9 +235,10 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
 
     try {
       final itinerary = await _apiClient.buildItinerary(
-        state.selectedPlaces,
-        intent: state.parsedIntent,
+        selectedPlaces,
+        intent: intent,
       );
+      if (requestGeneration != _requestGeneration) return false;
 
       state = state.copyWith(
         isLoading: false,
@@ -225,11 +246,15 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
         builtItinerary: itinerary,
       );
       return true;
-    } catch (e) {
+    } catch (error) {
+      if (requestGeneration != _requestGeneration) return false;
       state = state.copyWith(
         isLoading: false,
         loadingMessage: null,
-        errorMessage: 'Gagal membuat itinerary: ${e.toString()}',
+        errorMessage: _apiClient.friendlyErrorMessage(
+          error,
+          fallback: 'Itinerary belum dapat dibuat. Silakan coba lagi.',
+        ),
       );
       return false;
     }
@@ -300,6 +325,7 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
   }
 
   void reset() {
+    _requestGeneration++;
     state = TripCreationState();
   }
 }

@@ -23,6 +23,7 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   }
 
   void _sendMessage([String? value]) {
+    if (ref.read(tripCreationProvider).isLoading) return;
     final message = (value ?? _messageController.text).trim();
     if (message.isEmpty) return;
     ref.read(tripCreationProvider.notifier).submitPrompt(message);
@@ -391,7 +392,9 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                   Expanded(
                     child: TextField(
                       controller: _messageController,
-                      onSubmitted: (_) => _sendMessage(),
+                      onSubmitted: state.isLoading
+                          ? null
+                          : (value) => _sendMessage(value),
                       decoration: const InputDecoration(
                         hintText: 'Ngobrol atau ceritakan tujuan perjalanan...',
                         isDense: true,
