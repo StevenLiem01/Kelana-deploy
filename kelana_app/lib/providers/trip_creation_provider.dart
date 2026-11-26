@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import '../core/network/api_client.dart';
 import '../models/parsed_intent.dart';
 import '../models/place.dart';
@@ -148,6 +149,36 @@ class TripCreationNotifier extends StateNotifier<TripCreationState> {
   /// Update parsed intent fields manually from confirmation card
   void updateParsedIntent(ParsedIntent newIntent) {
     state = state.copyWith(parsedIntent: newIntent);
+  }
+
+  void notifyBudgetInsufficient({
+    required int estimatedMax,
+    required int userBudget,
+    required int selectedCount,
+    required String location,
+  }) {
+    final formatter = NumberFormat.currency(
+      locale: 'id_ID',
+      symbol: 'Rp ',
+      decimalDigits: 0,
+    );
+    final destination =
+        location.trim().isEmpty ? 'destinasi pilihanmu' : location.trim();
+    final message =
+        'Budget yang kamu masukkan (${formatter.format(userBudget)}) '
+        'lebih kecil daripada estimasi biaya maksimal untuk $selectedCount '
+        'destinasi di $destination (${formatter.format(estimatedMax)}). '
+        'Mungkin ada angka nol yang terlewat saat memasukkan budget. Kamu bisa '
+        'langsung balas di chat, misalnya "Ubah budget jadi Rp 500.000", atau '
+        'kurangi jumlah destinasi yang dipilih. Estimasi biaya ini bersifat '
+        'perkiraan.';
+
+    state = state.copyWith(
+      conversationHistory: _trimConversationHistory([
+        ...state.conversationHistory,
+        {'role': 'model', 'text': message},
+      ]),
+    );
   }
 
   void loadItinerary(Itinerary itinerary) {

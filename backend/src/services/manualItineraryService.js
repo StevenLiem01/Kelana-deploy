@@ -147,9 +147,20 @@ function distanceSquared(from, to) {
   return x * x + y * y;
 }
 
+function hasValidCoordinates(place) {
+  const { lat, lng } = place;
+  return lat !== null &&
+    lat !== undefined &&
+    String(lat).trim() !== '' &&
+    lng !== null &&
+    lng !== undefined &&
+    String(lng).trim() !== '' &&
+    Number.isFinite(Number(lat)) &&
+    Number.isFinite(Number(lng));
+}
+
 function orderByProximity(places) {
-  if (places.length < 3 || places.some(place =>
-    !Number.isFinite(Number(place.lat)) || !Number.isFinite(Number(place.lng)))) {
+  if (places.length < 3 || places.some(place => !hasValidCoordinates(place))) {
     return [...places];
   }
 
@@ -206,9 +217,7 @@ function scheduleStops(places, travelLegs, intent, budgetContext) {
   let day = 1;
   let currentTime = start;
   const scheduled = [];
-  let omittedForBudget = 0;
   let omittedForHours = 0;
-  let omittedForUnknownCost = 0;
   let includedWithUnknownCost = 0;
 
   for (let index = 0; index < places.length; index++) {
@@ -217,20 +226,6 @@ function scheduleStops(places, travelLegs, intent, budgetContext) {
     const budgetCategory = Object.hasOwn(totals, cost.budgetCategory)
       ? cost.budgetCategory
       : 'other';
-    if (budgetContext.budget > 0) {
-      if (!cost.costEstimateAvailable) {
-        omittedForUnknownCost++;
-        continue;
-      }
-      const costCeiling = cost.estimatedCostMax;
-      if (
-        totalCost + costCeiling > budgetContext.budget ||
-        totals[budgetCategory] + costCeiling > categoryBudgets[budgetCategory]
-      ) {
-        omittedForBudget++;
-        continue;
-      }
-    }
 
     const duration = visitDuration(place);
     const hours = parseOpeningHours(place.openingHours);
@@ -270,10 +265,10 @@ function scheduleStops(places, travelLegs, intent, budgetContext) {
         };
         scheduled.push(stop);
         currentTime = openTime + duration;
-        if (budgetContext.budget > 0) {
+        if (cost.costEstimateAvailable) {
           totalCost += cost.estimatedCostMax;
           totals[budgetCategory] += cost.estimatedCostMax;
-        } else if (!cost.costEstimateAvailable) {
+        } else {
           includedWithUnknownCost++;
         }
         placed = true;
@@ -290,12 +285,17 @@ function scheduleStops(places, travelLegs, intent, budgetContext) {
     }
   }
 
+  const exceedsBudget = budgetContext.budget > 0 && (
+    totalCost > budgetContext.budget ||
+    Object.entries(totals).some(([category, total]) =>
+      total > categoryBudgets[category])
+  );
+
   return {
     stops: scheduled.map(({ day: _day, ...stop }) => stop),
-    omittedForBudget,
     omittedForHours,
-    omittedForUnknownCost,
     includedWithUnknownCost,
+    exceedsBudget,
     totalCost,
     tripDays,
     start,
@@ -328,8 +328,8 @@ export async function buildManualItinerary(
     categoryMatches(place, categories),
   );
   const orderedPlaces = orderByProximity(eligiblePlaces);
-  const hasCoordinates = orderedPlaces.length > 0 && orderedPlaces.every(place =>
-    Number.isFinite(Number(place.lat)) && Number.isFinite(Number(place.lng)));
+  const hasCoordinates = orderedPlaces.length > 0 &&
+    orderedPlaces.every(hasValidCoordinates);
   const routeInfo = hasCoordinates
     ? await calculateRoute(orderedPlaces)
     : { travelLegs: [], totalEstimatedTravelMinutes: 0, polylinePoints: [] };
@@ -358,17 +358,14 @@ export async function buildManualItinerary(
   }));
   const summaryParts = [
     `Jadwal disusun otomatis dalam rentang ${formatClock(finalSchedule.start)}–${formatClock(finalSchedule.end)} untuk maksimal ${finalSchedule.tripDays} hari.`,
-    schedule.omittedForBudget
-      ? `${schedule.omittedForBudget} tempat dilewati agar estimasi biaya tidak melampaui budget atau alokasi kategori.`
-      : null,
-    schedule.omittedForUnknownCost
-      ? `${schedule.omittedForUnknownCost} tempat dilewati karena estimasi biaya tidak tersedia untuk memeriksa batas budget.`
+    finalSchedule.exceedsBudget
+      ? 'Batas atas estimasi biaya tempat melebihi budget atau alokasi kategori; itinerary tetap memuat tempat terpilih.'
       : null,
     schedule.omittedForHours
       ? `${schedule.omittedForHours} tempat tidak muat dalam rentang waktu atau jam buka yang tersedia.`
       : null,
-    schedule.includedWithUnknownCost
-      ? `Estimasi biaya tidak tersedia untuk ${schedule.includedWithUnknownCost} tempat; biaya tersebut tidak dihitung sebagai gratis.`
+    finalSchedule.includedWithUnknownCost
+      ? `Estimasi biaya tidak tersedia untuk ${finalSchedule.includedWithUnknownCost} tempat; periksa biaya aktual sebelum berangkat.`
       : null,
     !hasCoordinates
       ? 'Data koordinat tidak lengkap; waktu perjalanan dan rute tidak dihitung.'

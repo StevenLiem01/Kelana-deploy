@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../models/place.dart';
 import '../../providers/trip_creation_provider.dart';
 import '../../widgets/place_card.dart';
 
@@ -17,12 +18,31 @@ class RecommendationsScreen extends ConsumerStatefulWidget {
 class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
   String _selectedCategoryFilter = 'Semua';
 
-  void _handleBuildItinerary() async {
+  int _selectedEstimatedMaximum(List<Place> places) =>
+      places.fold(0, (total, place) => total + place.estimatedCostMax);
+
+  Future<void> _handleBuildItinerary() async {
     final tripNotifier = ref.read(tripCreationProvider.notifier);
-    final success = await tripNotifier.buildItinerary();
-    if (success && mounted) {
-      context.push('/itinerary');
+    final tripState = ref.read(tripCreationProvider);
+    final intent = tripState.parsedIntent;
+    final estimatedMax = _selectedEstimatedMaximum(tripState.selectedPlaces);
+    final userBudget = intent?.budget ?? 0;
+
+    if (userBudget > 0 && estimatedMax > userBudget) {
+      tripNotifier.notifyBudgetInsufficient(
+        estimatedMax: estimatedMax,
+        userBudget: userBudget,
+        selectedCount: tripState.selectedPlaces.length,
+        location: intent?.location ?? '',
+      );
+      if (!mounted) return;
+      context.pop();
+      return;
     }
+
+    final success = await tripNotifier.buildItinerary();
+    if (!mounted) return;
+    if (success) context.push('/itinerary');
   }
 
   @override
@@ -47,8 +67,7 @@ class _RecommendationsScreenState extends ConsumerState<RecommendationsScreen> {
       decimalDigits: 0,
     );
 
-    final totalSelectedCost =
-        selectedPlaces.fold(0, (sum, p) => sum + p.estimatedPrice);
+    final totalSelectedCost = _selectedEstimatedMaximum(selectedPlaces);
     final budgetLimit = intent?.budget ?? 0;
     final isOverBudget = budgetLimit > 0 && totalSelectedCost > budgetLimit;
     final budgetProgress = budgetLimit > 0

@@ -460,17 +460,16 @@ async function runTests() {
     const itineraryAccommodationCost = buildRes.body.data.places
       .filter(place => place.budgetCategory === 'accommodation')
       .reduce((total, place) => total + (place.estimatedPrice || 0), 0);
-    if (intent.budget > 0 && itineraryPlaceCost > intent.budget) {
-      throw new Error('Itinerary exceeded the total place-cost budget ceiling');
-    }
+    const exceedsBudget = intent.budget > 0 && itineraryPlaceCost > intent.budget;
+    const exceedsCategoryAllocation = intent.budget > 0 && (
+      itineraryFoodCost > intent.budget * intent.foodBudgetPercent / 100 ||
+      itineraryAccommodationCost > intent.budget * intent.accommodationBudgetPercent / 100
+    );
     if (
-      intent.budget > 0 &&
-      (
-        itineraryFoodCost > intent.budget * intent.foodBudgetPercent / 100 ||
-        itineraryAccommodationCost > intent.budget * intent.accommodationBudgetPercent / 100
-      )
+      (exceedsBudget || exceedsCategoryAllocation) &&
+      !buildRes.body.data.summary.toLowerCase().includes('melebihi budget')
     ) {
-      throw new Error('Itinerary exceeded a food or accommodation allocation');
+      throw new Error('Over-budget itinerary did not include a cost warning');
     }
     if (
       intent.categories.includes('Kuliner') &&
@@ -481,21 +480,35 @@ async function runTests() {
     console.log(`   Place-cost ceiling: Rp ${itineraryPlaceCost} / Rp ${intent.budget}`);
 
     const unaffordableRes = await request('POST', '/build-itinerary', {
-      places: [{
-        placeId: 'osm_luxury_test',
-        name: 'Fine dining test',
-        category: 'restaurant',
-        osmKey: 'amenity',
-        osmValue: 'restaurant',
-        cuisine: 'fine_dining',
-        estimatedPrice: 1,
-        estimatedCostMin: 1,
-        estimatedCostMax: 1,
-      }],
-      intent: { location: 'Semarang', budget: 50000, peopleCount: 1, dateTime: 'Hari ini' },
+      places: [1, 2, 3].map(index => ({
+        placeId: `over-budget-place-${index}`,
+        name: `Over Budget Place ${index}`,
+        category: 'attraction',
+        estimatedPrice: 50000,
+        estimatedCostMin: 50000,
+        estimatedCostMax: 50000,
+        budgetCategory: 'other',
+      })),
+      intent: {
+        location: 'Semarang',
+        budget: 100000,
+        peopleCount: 1,
+        dateTime: 'Hari ini',
+      },
     });
-    if (unaffordableRes.status !== 422) {
-      throw new Error('An itinerary with no affordable stops was not rejected');
+    const overBudgetPlaces = unaffordableRes.body?.data?.places || [];
+    const overBudgetTotal = overBudgetPlaces.reduce(
+      (total, place) => total + place.estimatedCostMax,
+      0,
+    );
+    if (
+      unaffordableRes.status !== 200 ||
+      overBudgetPlaces.length !== 3 ||
+      overBudgetTotal !== 150000 ||
+      !unaffordableRes.body.data.summary.toLowerCase().includes('melebihi budget') ||
+      !unaffordableRes.body.data.summary.toLowerCase().includes('koordinat tidak lengkap')
+    ) {
+      throw new Error('Over-budget itinerary must retain all places and return a clear warning');
     }
 
     console.log('\n5️⃣ Testing itinerary persistence and sharing ...');

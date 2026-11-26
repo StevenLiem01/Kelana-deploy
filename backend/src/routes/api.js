@@ -151,12 +151,6 @@ router.post('/build-itinerary', requireAuth, async (req, res) => {
     console.log(`[API /build-itinerary] Building itinerary for ${places.length} places`);
 
     const manualItinerary = await buildManualItinerary(places, intent);
-    if (manualItinerary.places.length === 0 && Number(intent.budget) > 0) {
-      return res.status(422).json({
-        success: false,
-        error: manualItinerary.summary,
-      });
-    }
 
     const itineraryResult = {
       id: 'itinerary_' + Date.now(),

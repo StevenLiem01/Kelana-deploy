@@ -124,6 +124,27 @@ void main() {
     notifier.dispose();
   });
 
+  test('budget warning is added to assistant conversation history', () {
+    final notifier = TripCreationNotifier(apiClient);
+
+    notifier.notifyBudgetInsufficient(
+      estimatedMax: 200000,
+      userBudget: 1000,
+      selectedCount: 3,
+      location: 'Bali',
+    );
+
+    final warning = notifier.state.conversationHistory.single;
+    expect(warning['role'], 'model');
+    expect(warning['text'], contains('Rp 1.000'));
+    expect(warning['text'], contains('3 destinasi di Bali'));
+    expect(warning['text'], contains('Rp 200.000'));
+    expect(warning['text'], contains('angka nol'));
+    expect(warning['text'], contains('Ubah budget jadi Rp 500.000'));
+    expect(warning['text'], contains('kurangi jumlah destinasi'));
+    notifier.dispose();
+  });
+
   test('provider carries completed conversation turns into the next request',
       () async {
     final fakeClient = _FakeApiClient();

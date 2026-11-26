@@ -100,6 +100,13 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(tripCreationProvider);
     final intent = state.parsedIntent;
+    String? latestAssistantMessage;
+    for (final message in state.conversationHistory.reversed) {
+      if (message['role'] == 'model') {
+        latestAssistantMessage = message['text'];
+        break;
+      }
+    }
 
     return Scaffold(
       backgroundColor: AppColors.htmlBackground,
@@ -259,9 +266,10 @@ class _PlanScreenState extends ConsumerState<PlanScreen> {
                     ),
                   ] else if (intent != null && !state.isLoading) ...[
                     _softMessage(
-                      child: const Text(
-                        'Sip! Ini detail perjalanan dan minat wisata yang aku tangkap. Sudah sesuai? Kamu bisa mengubahnya di bawah ini sebelum lanjut.',
-                        style: TextStyle(
+                      child: Text(
+                        latestAssistantMessage ??
+                            'Sip! Ini detail perjalanan dan minat wisata yang aku tangkap. Sudah sesuai? Kamu bisa mengubahnya di bawah ini sebelum lanjut.',
+                        style: const TextStyle(
                           fontSize: 13,
                           height: 1.5,
                           color: AppColors.htmlPrimary,
