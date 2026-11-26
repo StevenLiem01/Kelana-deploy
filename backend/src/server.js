@@ -4,28 +4,51 @@ import { config, isGeminiAvailable, isDirectionsAvailable } from './config/env.j
 import apiRouter from './routes/api.js';
 
 const app = express();
+const normalizeOrigin = origin =>
+  String(origin || '').trim().replace(/\/+$/, '').toLowerCase();
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
-  .map(origin => origin.trim())
+  .map(normalizeOrigin)
   .filter(Boolean);
 const allowAllLocalOrigins =
   config.nodeEnv !== 'production' &&
   !process.env.VERCEL &&
   (allowedOrigins.length === 0 || allowedOrigins.includes('*'));
-
-// Middleware
-app.use(cors({
+const corsOptions = {
   origin(origin, callback) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    let parsedOrigin;
+    try {
+      parsedOrigin = new URL(normalizedOrigin);
+    } catch {
+      parsedOrigin = null;
+    }
+
+    const isVercelOrigin = parsedOrigin?.protocol === 'https:' &&
+      parsedOrigin.hostname.endsWith('.vercel.app') &&
+      !parsedOrigin.port;
+    const isLocalhostOrigin = parsedOrigin?.protocol === 'http:' &&
+      parsedOrigin.hostname === 'localhost';
+
     if (
       !origin ||
       allowAllLocalOrigins ||
-      allowedOrigins.includes(origin)
+      allowedOrigins.includes(normalizedOrigin) ||
+      normalizedOrigin === 'https://kelana-apps.vercel.app' ||
+      isVercelOrigin ||
+      isLocalhostOrigin
     ) {
       return callback(null, true);
     }
     return callback(null, false);
   },
-}));
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+// Middleware
+app.options('*', cors(corsOptions));
+app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

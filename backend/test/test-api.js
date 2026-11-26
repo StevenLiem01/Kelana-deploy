@@ -17,7 +17,7 @@ import {
 
 const BASE_URL = `${process.env.TEST_BASE_URL || 'http://localhost:5000'}/api`;
 
-function request(method, path, body = null) {
+function request(method, path, body = null, headers = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(BASE_URL + path);
     const options = {
@@ -26,7 +26,8 @@ function request(method, path, body = null) {
       path: url.pathname,
       method: method,
       headers: {
-        'Content-Type': 'application/json'
+        ...(method === 'OPTIONS' ? {} : { 'Content-Type': 'application/json' }),
+        ...headers,
       }
     };
 
@@ -36,9 +37,9 @@ function request(method, path, body = null) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          resolve({ status: res.statusCode, body: parsed });
+          resolve({ status: res.statusCode, headers: res.headers, body: parsed });
         } catch (e) {
-          resolve({ status: res.statusCode, raw: data });
+          resolve({ status: res.statusCode, headers: res.headers, raw: data });
         }
       });
     });
@@ -344,6 +345,36 @@ async function runTests() {
     console.log('   App:', health.body?.app);
     console.log('   API Status:', JSON.stringify(health.body?.apiStatus));
     if (health.status !== 200) throw new Error('Health check failed');
+
+    console.log('\n1️⃣ Testing CORS preflight for production, preview, local, and configured origins ...');
+    for (const origin of [
+      'https://kelana-apps.vercel.app',
+      'https://kelana-preview-branch.vercel.app',
+      'http://localhost:5173',
+      'https://custom.example.com',
+    ]) {
+      const preflight = await request('OPTIONS', '/parse-intent', null, {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'content-type,authorization',
+      });
+      const allowedMethods = preflight.headers?.['access-control-allow-methods'] || '';
+      const allowedHeaders = (
+        preflight.headers?.['access-control-allow-headers'] || ''
+      ).toLowerCase().split(',').map(header => header.trim());
+      if (
+        preflight.status !== 204 ||
+        preflight.headers?.['access-control-allow-origin'] !== origin ||
+        !['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'].every(method =>
+          allowedMethods.split(',').map(value => value.trim()).includes(method)
+        ) ||
+        !['content-type', 'authorization'].every(header =>
+          allowedHeaders.includes(header)
+        )
+      ) {
+        throw new Error(`CORS preflight failed for origin ${origin}`);
+      }
+    }
 
     console.log('\n1️⃣ Testing protected endpoints reject unauthenticated requests ...');
     const originalNodeEnv = process.env.NODE_ENV;
