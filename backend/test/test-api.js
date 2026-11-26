@@ -1,12 +1,19 @@
 import http from 'http';
 import { requireAuth } from '../src/middleware/requireAuth.js';
 import { estimateOsmBudget, getTripBudgetContext } from '../src/services/budgetService.js';
+import { getMockPlacesForLocation } from '../src/mock/destinationsData.js';
 import { isUsablePhotonName } from '../src/services/placesService.js';
+import { buildManualItinerary } from '../src/services/manualItineraryService.js';
 import {
   heuristicParseIntent,
+  mergeConversationIntent,
   parseUserIntent,
   parseGeminiIntentResponse,
 } from '../src/services/geminiService.js';
+import {
+  geminiChatResponseSchema,
+  geminiIntentResponseSchema,
+} from '../src/schemas/intentSchema.js';
 
 const BASE_URL = `${process.env.TEST_BASE_URL || 'http://localhost:5000'}/api`;
 
@@ -28,15 +35,6 @@ function request(method, path, body = null) {
       res.on('data', (chunk) => data += chunk);
       res.on('end', () => {
         try {
-          if (
-            geminiIntentResponseSchema.required.length !== 1 ||
-            geminiIntentResponseSchema.required[0] !== 'chat_response' ||
-            !geminiIntentResponseSchema.properties.location ||
-            !geminiIntentResponseSchema.properties.budget
-          ) {
-            throw new Error('Gemini conversational intent schema is invalid');
-          }
-
           const parsed = JSON.parse(data);
           resolve({ status: res.statusCode, body: parsed });
         } catch (e) {
@@ -58,6 +56,15 @@ async function runTests() {
   console.log('🚀 Starting Kelana API Verification Tests...\n');
 
   try {
+    if (
+      geminiChatResponseSchema.required.length !== 1 ||
+      geminiChatResponseSchema.required[0] !== 'chat_response' ||
+      !geminiIntentResponseSchema.properties.location ||
+      !geminiIntentResponseSchema.properties.budget
+    ) {
+      throw new Error('Gemini intent response schemas are invalid');
+    }
+
     const plainTextResponse = 'Hai, mau pergi ke mana?';
     const chatFallback = parseGeminiIntentResponse(plainTextResponse);
     if (
@@ -103,6 +110,9 @@ async function runTests() {
     const fallbackIntent = heuristicParseIntent(
       'Mau ke Taipei tanggal 20 Oktober 2026 selama 5 hari, budget Rp 20 juta, suka pantai dan kuliner',
     );
+    const dottedBudgetIntent = heuristicParseIntent('Budget Rp 5.000.000');
+    const commaBudgetIntent = heuristicParseIntent('Budget Rp 5,000,000');
+    const dateYearIntent = heuristicParseIntent('Mau ke Bali tanggal 20 Oktober 2026');
     const incompleteIntent = heuristicParseIntent('Mau liburan dengan budget 500 ribu');
     const greetingIntent = heuristicParseIntent('Halo');
     const unspecifiedIntent = heuristicParseIntent('Mau liburan ke Bandung');
@@ -135,6 +145,10 @@ async function runTests() {
       budgetFromHistory.location !== 'Jakarta' ||
       budgetFromHistory.budget !== 100000000 ||
       !budgetFromHistory.chat_response.includes('100.000.000') ||
+      dottedBudgetIntent.budget !== 5000000 ||
+      commaBudgetIntent.budget !== 5000000 ||
+      dateYearIntent.budget !== 0 ||
+      getMockPlacesForLocation('Singapore').length !== 0 ||
       incompleteIntent.dateTime !== 'Belum ditentukan'
     ) {
       throw new Error('Intent fallback extraction failed');
@@ -324,8 +338,10 @@ async function runTests() {
     if (health.status !== 200) throw new Error('Health check failed');
 
     console.log('\n1️⃣ Testing protected endpoints reject unauthenticated requests ...');
-    const originalService = process.env.K_SERVICE;
-    process.env.K_SERVICE = 'test';
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalVercel = process.env.VERCEL;
+    process.env.NODE_ENV = 'production';
+    process.env.VERCEL = '1';
     let rejectedStatus;
     try {
       await requireAuth(
@@ -344,10 +360,15 @@ async function runTests() {
         },
       );
     } finally {
-      if (originalService === undefined) {
-        delete process.env.K_SERVICE;
+      if (originalNodeEnv === undefined) {
+        delete process.env.NODE_ENV;
       } else {
-        process.env.K_SERVICE = originalService;
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+      if (originalVercel === undefined) {
+        delete process.env.VERCEL;
+      } else {
+        process.env.VERCEL = originalVercel;
       }
     }
     if (rejectedStatus !== 401) {

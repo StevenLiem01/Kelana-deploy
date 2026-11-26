@@ -4,9 +4,28 @@ import { config, isGeminiAvailable, isDirectionsAvailable } from './config/env.j
 import apiRouter from './routes/api.js';
 
 const app = express();
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(origin => origin.trim())
+  .filter(Boolean);
+const allowAllLocalOrigins =
+  config.nodeEnv !== 'production' &&
+  !process.env.VERCEL &&
+  (allowedOrigins.length === 0 || allowedOrigins.includes('*'));
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (
+      !origin ||
+      allowAllLocalOrigins ||
+      allowedOrigins.includes(origin)
+    ) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -79,8 +98,8 @@ app.use((req, res) => {
 app.use((err, req, res, next) => {
   console.error('[Unhandled Error]', err);
   res.status(500).json({
+    success: false,
     error: 'Terjadi kesalahan internal server.',
-    message: err.message
   });
 });
 

@@ -14,6 +14,15 @@ import {
 } from '../services/itineraryStore.js';
 
 const router = express.Router();
+const INTERNAL_ERROR_MESSAGE = 'Terjadi kesalahan internal server.';
+
+function handleApiError(res, route, error) {
+  console.error(`[API ${route}] Error:`, error);
+  return res.status(500).json({
+    success: false,
+    error: INTERNAL_ERROR_MESSAGE,
+  });
+}
 
 /**
  * Health check & environment status
@@ -85,11 +94,7 @@ router.post('/parse-intent', requireAuth, async (req, res) => {
       data: parsedIntent
     });
   } catch (error) {
-    console.error('[API /parse-intent] Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Gagal memproses niat perjalanan: ' + error.message
-    });
+    return handleApiError(res, '/parse-intent', error);
   }
 });
 
@@ -118,11 +123,7 @@ router.post('/search-places', requireAuth, async (req, res) => {
       data: places
     });
   } catch (error) {
-    console.error('[API /search-places] Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Gagal mencari tempat: ' + error.message
-    });
+    return handleApiError(res, '/search-places', error);
   }
 });
 
@@ -176,11 +177,7 @@ router.post('/build-itinerary', requireAuth, async (req, res) => {
       data: itineraryResult
     });
   } catch (error) {
-    console.error('[API /build-itinerary] Error:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Gagal menyusun itinerary: ' + error.message
-    });
+    return handleApiError(res, '/build-itinerary', error);
   }
 });
 
@@ -192,8 +189,7 @@ router.get('/itineraries', requireAuth, async (req, res) => {
     const items = await listItineraries(req.user.uid);
     return res.json({ success: true, data: items });
   } catch (error) {
-    console.error('[API /itineraries] Error loading itineraries:', error);
-    return res.status(500).json({ success: false, error: 'Gagal memuat itinerary.' });
+    return handleApiError(res, '/itineraries', error);
   }
 });
 
@@ -217,8 +213,7 @@ router.post('/itineraries', requireAuth, async (req, res) => {
     await saveItinerary(req.user.uid, itinerary);
     return res.json({ success: true, data: itinerary });
   } catch (error) {
-    console.error('[API /itineraries] Error saving itinerary:', error);
-    return res.status(500).json({ success: false, error: 'Gagal menyimpan itinerary.' });
+    return handleApiError(res, '/itineraries', error);
   }
 });
 
@@ -230,8 +225,7 @@ router.get('/itineraries/:id', requireAuth, async (req, res) => {
     }
     return res.json({ success: true, data: item });
   } catch (error) {
-    console.error('[API /itineraries/:id] Error loading itinerary:', error);
-    return res.status(500).json({ success: false, error: 'Gagal memuat itinerary.' });
+    return handleApiError(res, '/itineraries/:id', error);
   }
 });
 
@@ -240,8 +234,7 @@ router.delete('/itineraries/:id', requireAuth, async (req, res) => {
     const deleted = await deleteItinerary(req.user.uid, req.params.id);
     return res.json({ success: deleted });
   } catch (error) {
-    console.error('[API /itineraries/:id] Error deleting itinerary:', error);
-    return res.status(500).json({ success: false, error: 'Gagal menghapus itinerary.' });
+    return handleApiError(res, '/itineraries/:id', error);
   }
 });
 
@@ -253,8 +246,7 @@ router.get('/share/:shareCode', async (req, res) => {
     }
     return res.status(404).json({ error: 'Kode share tidak valid atau sudah kadaluarsa.' });
   } catch (error) {
-    console.error('[API /share/:shareCode] Error finding shared itinerary:', error);
-    return res.status(500).json({ success: false, error: 'Gagal memuat itinerary bersama.' });
+    return handleApiError(res, '/share/:shareCode', error);
   }
 });
 

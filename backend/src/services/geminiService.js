@@ -1,8 +1,12 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { config, isGeminiAvailable } from '../config/env.js';
-import { geminiIntentResponseSchema } from '../schemas/intentSchema.js';
+import {
+  geminiChatResponseSchema,
+  geminiIntentResponseSchema,
+  geminiItineraryResponseSchema,
+} from '../schemas/intentSchema.js';
 
-const GEMINI_MODEL_FALLBACKS = ['gemini-3.1-flash-lite', 'gemini-3.6-flash'];
+const GEMINI_MODEL_FALLBACKS = ['gemini-3.5-flash-lite'];
 
 function titleCase(value) {
   return value.replace(/\b\p{L}/gu, letter => letter.toUpperCase());
@@ -14,6 +18,30 @@ function parseNumberWord(value) {
     enam: 6, tujuh: 7, delapan: 8, sembilan: 9, sepuluh: 10,
   };
   return Number.parseInt(value, 10) || numberWords[value.toLowerCase()] || 0;
+}
+
+function extractExplicitBudget(rawQuery) {
+  const query = String(rawQuery || '').toLowerCase();
+  const match = query.match(
+    /\b(?:rp|budget|biaya|uang)\b\s*:?\s*(?:rp\s*)?(\d[\d.,]*)(?:\s*(rb|ribu|k|jt|juta)\b)?|(\d[\d.,]*)\s*(rb|ribu|k|jt|juta)\b/i,
+  );
+  if (!match) return null;
+
+  const rawAmount = (match[1] || match[3]).replace(/[.,]+$/, '');
+  const amount = Number(rawAmount.replace(/[.,]/g, ''));
+  if (!Number.isSafeInteger(amount)) return null;
+
+  const unit = (match[2] || match[4] || '').toLowerCase();
+  const multiplier = ['jt', 'juta'].includes(unit)
+    ? 1000000
+    : ['rb', 'ribu', 'k'].includes(unit) ? 1000 : 1;
+  const budget = amount * multiplier;
+  return Number.isSafeInteger(budget) ? budget : null;
+}
+
+function hasExplicitPeopleCount(query) {
+  return /(?:\d+\s*(?:orang|pax|org)|keluarga|family|berdua|pacar|pasangan)/i
+    .test(query);
 }
 
 async function generateWithTransientRetry(model, content) {
@@ -117,19 +145,8 @@ export function heuristicParseIntent(rawQuery) {
   if (vagueDestinations.has(location.toLowerCase())) location = '';
 
   // 2. Detect budget
-  let budget = 0;
+  const budget = extractExplicitBudget(query) ?? 0;
   let budgetLevel = "unspecified";
-  const budgetKMatch = query.match(/(\d+)\s*(?:rb|ribu|k)\b/);
-  const budgetFullMatch = query.match(/(?:rp|budget|biaya|uang)?\s*(\d{4,9})\b/);
-  const budgetJtMatch = query.match(/(\d+)\s*(?:jt|juta)\b/);
-
-  if (budgetKMatch) {
-    budget = parseInt(budgetKMatch[1], 10) * 1000;
-  } else if (budgetJtMatch) {
-    budget = parseInt(budgetJtMatch[1], 10) * 1000000;
-  } else if (budgetFullMatch) {
-    budget = parseInt(budgetFullMatch[1], 10);
-  }
 
   if (budget === 0) budgetLevel = "unspecified";
   else if (budget > 1000000) budgetLevel = "luxury";
@@ -225,7 +242,12 @@ export function heuristicParseIntent(rawQuery) {
   };
 }
 
-async function generateConversationalResponse(rawQuery, intentData, userPreferences) {
+async function generateConversationalResponse(
+  rawQuery,
+  intentData,
+  userPreferences,
+  history = [],
+) {
   if (config.mockMode === 'always' || !isGeminiAvailable()) {
     throw new Error('Gemini is required for chat responses but is unavailable.');
   }
@@ -233,6 +255,7 @@ async function generateConversationalResponse(rawQuery, intentData, userPreferen
   try {
     const generationConfig = {
         responseMimeType: 'application/json',
+        responseSchema: geminiChatResponseSchema,
         thinkingConfig: { thinkingLevel: 'low' },
       };
     const conversationContext = {
@@ -242,7 +265,7 @@ async function generateConversationalResponse(rawQuery, intentData, userPreferen
       peopleCount: userPreferences.peopleCount || intentData.peopleCount || 1,
       categories: userPreferences.categories || intentData.categories || [],
     };
-    const prompt = `Balas pesan terbaru pengguna sebagai Kelana, asisten perjalanan yang ramah. Gunakan Bahasa Indonesia yang alami dan bervariasi, bukan template. Pahami pesan berdasarkan konteks. Jangan mengarang detail perjalanan dan jangan membuat itinerary. Jika destinasi belum diketahui, tanyakan destinasi dengan santai. Jika destinasi sudah diketahui, jangan tanyakan detail tambahan; tanggapi singkat dan arahkan pengguna untuk melanjutkan ke pilihan rekomendasi perjalanan. Kembalikan JSON valid dengan satu properti string: {"chat_response":"..."}.\nKonteks: ${JSON.stringify(conversationContext)}\nPesan terbaru: ${JSON.stringify(rawQuery)}`;
+    const prompt = `Balas pesan terbaru pengguna sebagai Kelana, asisten perjalanan yang ramah. Gunakan Bahasa Indonesia yang alami dan bervariasi, bukan template. Pahami pesan berdasarkan konteks. Jangan mengarang detail perjalanan dan jangan membuat itinerary. Jika destinasi belum diketahui, tanyakan destinasi dengan santai. Jika destinasi sudah diketahui, jangan tanyakan detail tambahan; tanggapi singkat dan arahkan pengguna untuk melanjutkan ke pilihan rekomendasi perjalanan. Kembalikan JSON valid dengan satu properti string: {"chat_response":"..."}.\nKonteks: ${JSON.stringify(conversationContext)}\nRiwayat percakapan: ${JSON.stringify(history)}\nPesan terbaru: ${JSON.stringify(rawQuery)}`;
     const result = await generateWithAvailableModel(prompt, generationConfig);
     const parsed = parseGeminiIntentResponse(result.response.text().trim());
     const chatResponse = String(parsed.chat_response || '').trim();
@@ -259,13 +282,75 @@ async function generateConversationalResponse(rawQuery, intentData, userPreferen
 /**
  * Parse user prompt into structured travel intent using Gemini API
  */
-export async function parseUserIntent(rawQuery, userPreferences = {}) {
-  const extractedIntent = heuristicParseIntent(rawQuery);
+export function mergeConversationIntent(rawQuery, history = []) {
+  const currentIntent = heuristicParseIntent(rawQuery);
+  const historicalIntent = (Array.isArray(history) ? history : [])
+    .filter(message => message?.role === 'user')
+    .reduce((intent, message) => {
+      const text = (message.parts || [])
+        .map(part => typeof part?.text === 'string' ? part.text : '')
+        .join('\n');
+      if (!text) return intent;
+
+      const parsed = heuristicParseIntent(text);
+      return {
+        ...intent,
+        location: parsed.location || intent.location,
+        budget: parsed.budget || intent.budget,
+        budgetLevel: parsed.budget > 0 ? parsed.budgetLevel : intent.budgetLevel,
+        dateTime: parsed.dateTime !== 'Belum ditentukan'
+          ? parsed.dateTime
+          : intent.dateTime,
+        peopleCount: hasExplicitPeopleCount(text)
+          ? parsed.peopleCount
+          : intent.peopleCount,
+        categories: parsed.categories.length
+          ? parsed.categories
+          : intent.categories,
+      };
+    }, heuristicParseIntent(''));
+
+  const location = currentIntent.location || historicalIntent.location;
+  const budget = currentIntent.budget || historicalIntent.budget;
+  const budgetLevel = currentIntent.budget > 0
+    ? currentIntent.budgetLevel
+    : historicalIntent.budgetLevel;
+  const dateTime = currentIntent.dateTime !== 'Belum ditentukan'
+    ? currentIntent.dateTime
+    : historicalIntent.dateTime;
+  const peopleCount = hasExplicitPeopleCount(rawQuery)
+    ? currentIntent.peopleCount
+    : historicalIntent.peopleCount;
+  const categories = currentIntent.categories.length
+    ? currentIntent.categories
+    : historicalIntent.categories;
+
+  return {
+    ...currentIntent,
+    location,
+    budget,
+    budgetLevel,
+    dateTime,
+    peopleCount,
+    categories,
+    userNotes: [
+      location ? `Permintaan perjalanan ke ${location}` : '',
+      categories.length ? `dengan fokus ${categories.join(', ')}` : '',
+      budget > 0 ? `dan budget Rp ${budget.toLocaleString('id-ID')}` : '',
+    ].filter(Boolean).join(' '),
+    chat_response: location
+      ? `Aku menangkap tujuan perjalananmu ke ${location}.${budget > 0 ? ` Budget yang disebutkan Rp ${budget.toLocaleString('id-ID')}.` : ''} Ada detail lain yang ingin ditambahkan?`
+      : currentIntent.chat_response,
+  };
+}
+
+export async function parseUserIntent(rawQuery, userPreferences = {}, history = []) {
+  const extractedIntent = mergeConversationIntent(rawQuery, history);
+  const currentIntent = heuristicParseIntent(rawQuery);
   const previousLocation = String(userPreferences.location || '').trim();
   const location = extractedIntent.location || previousLocation;
-  const hasExplicitBudget = /(?:\brp\b|\bbudget\b|\bbiaya\b)?\s*\d[\d.,]*\s*(?:rb|ribu|k|jt|juta)\b|\b(?:rp|budget|biaya)\s*\d{4,9}\b/i
-    .test(rawQuery);
-  const hasExplicitDate = extractedIntent.dateTime !== 'Belum ditentukan';
+  const hasExplicitBudget = extractExplicitBudget(rawQuery) !== null;
+  const hasExplicitDate = currentIntent.dateTime !== 'Belum ditentukan';
   const previousBudget = Number(userPreferences.budget) || 0;
   const previousDateTime = String(userPreferences.dateTime || '').trim();
   const fallbackIntent = {
@@ -273,40 +358,52 @@ export async function parseUserIntent(rawQuery, userPreferences = {}) {
     location,
     budget: hasExplicitBudget
       ? extractedIntent.budget
-      : previousBudget || 0,
+      : previousBudget || extractedIntent.budget || 0,
     budgetLevel: hasExplicitBudget
       ? extractedIntent.budgetLevel
       : previousBudget
         ? userPreferences.budgetLevel || extractedIntent.budgetLevel
-        : 'unspecified',
+        : extractedIntent.budget > 0
+          ? extractedIntent.budgetLevel
+          : 'unspecified',
     dateTime: hasExplicitDate
-      ? extractedIntent.dateTime
-      : previousDateTime || 'Belum ditentukan',
-    categories: extractedIntent.categories,
+      ? currentIntent.dateTime
+      : previousDateTime || extractedIntent.dateTime,
   };
 
   if (!location) {
-    return generateConversationalResponse(rawQuery, fallbackIntent, userPreferences);
+    return generateConversationalResponse(
+      rawQuery,
+      fallbackIntent,
+      userPreferences,
+      history,
+    );
   }
 
   const missingBudget = fallbackIntent.budget <= 0;
   const missingDate = fallbackIntent.dateTime === 'Belum ditentukan';
   if (missingBudget || missingDate) {
-    return generateConversationalResponse(rawQuery, fallbackIntent, userPreferences);
+    return generateConversationalResponse(
+      rawQuery,
+      fallbackIntent,
+      userPreferences,
+      history,
+    );
   }
 
   if (!extractedIntent.location) {
     return fallbackIntent;
   }
 
-  // If in pure mock mode or Gemini key is missing, use intelligent heuristic parser
+  // Complete intents can use the deterministic parser when Gemini is unavailable.
   if (config.mockMode === 'always' || !isGeminiAvailable()) {
-    throw new Error('Gemini is required for chat responses but is unavailable.');
+    return fallbackIntent;
   }
 
   try {
     const generationConfig = {
         responseMimeType: "application/json",
+        responseSchema: geminiIntentResponseSchema,
         thinkingConfig: { thinkingLevel: 'low' },
       };
 
@@ -344,6 +441,7 @@ Format output HARUS selalu JSON valid yang cocok dengan skema berikut:
     const userMessage = `
 Input User: "${rawQuery}"
 ${userPreferences && Object.keys(userPreferences).length > 0 ? `Preferensi Historis User: ${JSON.stringify(userPreferences)}` : ''}
+Riwayat Percakapan: ${JSON.stringify(history)}
     `;
 
     const result = await generateWithAvailableModel(
@@ -501,6 +599,7 @@ export async function optimizeItinerary(places, intent = {}) {
   try {
     const generationConfig = {
         responseMimeType: "application/json",
+        responseSchema: geminiItineraryResponseSchema,
         thinkingConfig: { thinkingLevel: 'low' },
       };
 

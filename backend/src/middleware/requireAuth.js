@@ -2,7 +2,9 @@ import { getApps } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 
 export async function requireAuth(req, res, next) {
-  if (!process.env.K_SERVICE && getApps().length === 0) {
+  const isLocalDevelopment =
+    process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+  if (isLocalDevelopment && getApps().length === 0) {
     req.user = { uid: 'local-development' };
     return next();
   }

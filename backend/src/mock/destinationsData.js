@@ -289,15 +289,13 @@ export const mockDestinations = {
  */
 export function getMockPlacesForLocation(location, categories = [], budget = 0) {
   const locLower = (location || '').toLowerCase().trim();
+  if (!locLower) return [];
 
   let matchedKey = Object.keys(mockDestinations).find(key => 
     locLower.includes(key) || key.includes(locLower)
   );
 
-  if (!matchedKey) {
-    // Default fallback to Semarang or Jogja
-    matchedKey = 'semarang';
-  }
+  if (!matchedKey) return [];
 
   let places = [...mockDestinations[matchedKey]];
 
