@@ -16,7 +16,7 @@ export const mockDestinations = {
       lat: -6.9840,
       lng: 110.4103,
       address: "Jl. Pemuda No.160, Sekayu, Kec. Semarang Tengah, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1596402184320-417e7178b2cd?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/92/Lawang_Sewu_Semarang_Indonesia_1.jpg/960px-Lawang_Sewu_Semarang_Indonesia_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Gedung bersejarah peninggalan kolonial Belanda dengan arsitektur pintu seribu yang megah dan museum kereta api.",
       openingHours: "08:00 - 20:00 WIB"
     },
@@ -31,7 +31,7 @@ export const mockDestinations = {
       lat: -6.9962,
       lng: 110.3981,
       address: "Jl. Simongan No.129, Bongsari, Kec. Semarang Barat, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1548013146-72479768bbaa?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/33/Sam_Po_Kong.jpg/960px-Sam_Po_Kong.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Klenteng tertua bernuansa akulturasi budaya Tionghoa dan Jawa, bekas tempat persinggahan Laksamana Cheng Ho.",
       openingHours: "08:00 - 20:00 WIB"
     },
@@ -46,7 +46,7 @@ export const mockDestinations = {
       lat: -6.9680,
       lng: 110.4281,
       address: "Bandarharjo, Kec. Semarang Utara, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Kota_Lama_Semarang_4.jpg/960px-Kota_Lama_Semarang_4.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Little Netherland dengan bangunan Eropa kuno terawat, Gereja Blenduk, kafe estetik, dan spot foto menarik.",
       openingHours: "Buka 24 Jam"
     },
@@ -61,7 +61,7 @@ export const mockDestinations = {
       lat: -6.9742,
       lng: 110.4261,
       address: "Gang Lombok No.11, Purwodinatan, Kec. Semarang Tengah, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://upload.wikimedia.org/wikipedia/commons/2/24/Loenpia_Gang_Lombok_Semarang.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
       description: "Pelopor lumpia legendaris di Semarang sejak abad ke-19, menyajikan lumpia basah dan goreng dengan rebung istimewa.",
       openingHours: "08:00 - 17:00 WIB"
     },
@@ -76,7 +76,7 @@ export const mockDestinations = {
       lat: -6.9936,
       lng: 110.4326,
       address: "Jl. Brigjen Katamso No.1, Peterongan, Kec. Semarang Selatan, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f5/Soto_Bangkong.JPG/960px-Soto_Bangkong.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Soto ayam berkuah cokelat bening khas Semarang dengan pelengkap sate kerang, perkedel, dan tempe renyah.",
       openingHours: "07:00 - 22:00 WIB"
     },
@@ -91,7 +91,7 @@ export const mockDestinations = {
       lat: -6.9912,
       lng: 110.4219,
       address: "Jl. Plampitan No.54, Bangunharjo, Kec. Semarang Tengah, Kota Semarang",
-      photoUrl: "https://images.unsplash.com/photo-1604382354936-07c5d9983bd3?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/26/Tahu_gimbal_in_Semarang.jpg/960px-Tahu_gimbal_in_Semarang.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Tahu gimbal porsi melimpah dengan bakwan udang renyah, lontong, tauge, dan bumbu petis kacang mantap.",
       openingHours: "10:00 - 16:00 WIB"
     }
@@ -108,7 +108,7 @@ export const mockDestinations = {
       lat: -7.7520,
       lng: 110.4915,
       address: "Jl. Raya Solo - Yogyakarta No.16, Kranggan, Bokoharjo, Prambanan",
-      photoUrl: "https://images.unsplash.com/photo-1596402184320-417e7178b2cd?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e9/Candi_prambanan_di_malam_hari.jpg/960px-Candi_prambanan_di_malam_hari.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Kompleks candi Hindu terbesar dan termegah di Indonesia berlatar arsitektur batu menjulang indah.",
       openingHours: "06:30 - 17:00 WIB"
     },
@@ -123,7 +123,7 @@ export const mockDestinations = {
       lat: -7.8053,
       lng: 110.3642,
       address: "Jl. Rotowijayan Blok No. 1, Panembahan, Kraton, Kota Yogyakarta",
-      photoUrl: "https://images.unsplash.com/photo-1548013146-72479768bbaa?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/Yogyakarta_Indonesia_Kraton-the-Sultans-Palace-02.jpg/960px-Yogyakarta_Indonesia_Kraton-the-Sultans-Palace-02.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Pusat kebudayaan Jawa yang masih hidup, istana Sultan dengan museum pusaka dan pertunjukan gamelan.",
       openingHours: "08:30 - 14:00 WIB"
     },
@@ -138,7 +138,7 @@ export const mockDestinations = {
       lat: -7.8099,
       lng: 110.3592,
       address: "Patehan, Kecamatan Kraton, Kota Yogyakarta",
-      photoUrl: "https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/e1/Taman_Sari_Water_Castle%2C_Yogyakarta%2C_20220818_1041_8964.jpg/960px-Taman_Sari_Water_Castle%2C_Yogyakarta%2C_20220818_1041_8964.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Bekas taman pemandian istana dan masjid bawah tanah dengan lorong mistis yang fotogenik.",
       openingHours: "09:00 - 15:00 WIB"
     },
@@ -153,7 +153,7 @@ export const mockDestinations = {
       lat: -7.8041,
       lng: 110.3675,
       address: "Jl. Wijilan No.167, Panembahan, Kraton, Kota Yogyakarta",
-      photoUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/73/Gudeg_Yu_Djum_Pusat%2C_Jl._Laksda_Adi_Sucipto%2C_Yogyakarta_-_panoramio.jpg/960px-Gudeg_Yu_Djum_Pusat%2C_Jl._Laksda_Adi_Sucipto%2C_Yogyakarta_-_panoramio.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Gudeg kering legendaris dimasak dengan kayu bakar, disajikan bersama krecek pedas dan ayam kampung.",
       openingHours: "06:00 - 22:00 WIB"
     },
@@ -168,7 +168,7 @@ export const mockDestinations = {
       lat: -7.7928,
       lng: 110.3658,
       address: "Jl. Malioboro, Sosromenduran, Gedong Tengen, Kota Yogyakarta",
-      photoUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f0/Malioboro_Street%2C_Yogyakarta.JPG/960px-Malioboro_Street%2C_Yogyakarta.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Jantung kota Jogja untuk jalan santai, belanja oleh-oleh batik, bakpia, dan menikmati suasana malam.",
       openingHours: "Buka 24 Jam"
     }
@@ -185,7 +185,7 @@ export const mockDestinations = {
       lat: -6.9025,
       lng: 107.6186,
       address: "Jl. Diponegoro No.22, Citarum, Kec. Bandung Wetan, Kota Bandung",
-      photoUrl: "https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/01/Gedung_Sate_Bandung.jpg/960px-Gedung_Sate_Bandung.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Ikon arsitektur khas Bandung dengan ornamen tusuk sate dan museum interaktif berteknologi tinggi.",
       openingHours: "09:30 - 16:00 WIB"
     },
@@ -200,7 +200,7 @@ export const mockDestinations = {
       lat: -6.9175,
       lng: 107.6096,
       address: "Jl. Braga, Sumur Bandung, Kota Bandung",
-      photoUrl: "https://images.unsplash.com/photo-1548013146-72479768bbaa?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c7/Bank_BJB_Headquarters_in_Braga_street%2C_Bandung_%281%29.jpg/960px-Bank_BJB_Headquarters_in_Braga_street%2C_Bandung_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Kawasan bernuansa Paris van Java dengan deretan kafe estetik, toko kue legendaris, dan lukisan jalanan.",
       openingHours: "Buka 24 Jam"
     },
@@ -215,7 +215,7 @@ export const mockDestinations = {
       lat: -6.8341,
       lng: 107.6636,
       address: "Ciburial, Kec. Cimenyan, Kabupaten Bandung Barat",
-      photoUrl: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fc/Tebing_Keraton_32.jpg/960px-Tebing_Keraton_32.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Pemandangan kabut pagi dan hamparan hutan pinus Taman Hutan Raya Ir. H. Djuanda dari ketinggian tebing.",
       openingHours: "05:00 - 18:00 WIB"
     },
@@ -230,7 +230,7 @@ export const mockDestinations = {
       lat: -6.9154,
       lng: 107.5956,
       address: "Paskal Hyper Square, Jl. Pasir Kaliki No.25-27, Kota Bandung",
-      photoUrl: "https://images.unsplash.com/photo-1569718212165-3a8278d5f624?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/43/Bandung_View_dari_Gedung_Wisma_HSBC_Asia_Afrika_4.jpg/960px-Bandung_View_dari_Gedung_Wisma_HSBC_Asia_Afrika_4.jpg?utm_source=en.wikipedia.org&utm_campaign=api&utm_content=thumbnail",
       description: "Pusat kuliner outdoor dengan lebih dari 100 tenant kuliner khas Nusantara dan modern.",
       openingHours: "10:00 - 23:00 WIB"
     }
@@ -247,7 +247,7 @@ export const mockDestinations = {
       lat: -8.6212,
       lng: 115.0868,
       address: "Beraban, Kec. Kediri, Kabupaten Tabanan, Bali",
-      photoUrl: "https://images.unsplash.com/photo-1537996194471-e657df975ab4?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dc/Bali_-_Pura_Tanah_Lot%2C_20220827_0957_1108.jpg/960px-Bali_-_Pura_Tanah_Lot%2C_20220827_0957_1108.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Pura sakral di atas bongkahan batu karang besar di tengah deburan ombak samudra, spektakuler saat sunset.",
       openingHours: "06:00 - 19:00 WITA"
     },
@@ -262,7 +262,7 @@ export const mockDestinations = {
       lat: -8.5194,
       lng: 115.2631,
       address: "Jl. Monkey Forest, Ubud, Kecamatan Ubud, Kabupaten Gianyar, Bali",
-      photoUrl: "https://images.unsplash.com/photo-1518548419970-58e3b4079ab2?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/52/Macaca_fascicularis%2C_Ubud_Monkey_Forest%2C_Bali%2C_20220822_1012_9935.jpg/960px-Macaca_fascicularis%2C_Ubud_Monkey_Forest%2C_Bali%2C_20220822_1012_9935.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Hutan lindung nan asri yang dihuni ratusan monyet ekor panjang dan candi-candi kuno mistis.",
       openingHours: "09:00 - 18:00 WITA"
     },
@@ -277,7 +277,7 @@ export const mockDestinations = {
       lat: -8.5036,
       lng: 115.2547,
       address: "Kelusa, Payangan, Jl. Raya Campuan, Sayan, Kecamatan Ubud, Bali",
-      photoUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600&auto=format&fit=crop&q=80",
+      photoUrl: "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/35/Campuhan_Ridge_Walk%2C_Ubud%2C_Bali_%2815003625958%29.jpg/960px-Campuhan_Ridge_Walk%2C_Ubud%2C_Bali_%2815003625958%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
       description: "Jalur jalan santai menyusuri bukit berpadang ilalang hijau dengan lembah sungai di kedua sisi.",
       openingHours: "Buka 24 Jam"
     }

@@ -5,6 +5,11 @@ import { getMockPlacesForLocation } from '../mock/destinationsData.js';
 
 const PHOTON_URL = 'https://photon.komoot.io/api/';
 const PHOTON_REVERSE_URL = 'https://photon.komoot.io/reverse';
+const WIKIMEDIA_API_URL = 'https://commons.wikimedia.org/w/api.php';
+const WIKIMEDIA_IMAGE_EXTENSIONS = /\.(?:jpe?g|png|webp)$/i;
+const UNWANTED_PLACE_NAME = /\b(?:scam(?:mer|er)?s?|free|entrance|fish\s?farm|shade\s?house)\b|!/i;
+const UNWANTED_PHOTO_CONTENT = /\b(?:logo|map|peta|diagram|coat of arms|flag|icon|symbol|poster|screenshot|illustration|drawing|ai[- ]generated|synthetic|collage)\b/i;
+const PRICE_LIKE_PLACE_NAME = /\b\d+(?:[.,]\d+)?\s*(?:k|rb|ribu|jt|juta)\b/i;
 
 export function isUsablePhotonName(value) {
   const name = String(value || '').trim();
@@ -18,12 +23,118 @@ export function isUsablePhotonName(value) {
     letters < 3 ||
     alphanumericCount === 0 ||
     letters / alphanumericCount < 0.5 ||
-    /^(?:unknown|unnamed|no name|unclassified|object|node|way)\b/i.test(name)
+    /^(?:unknown|unnamed|no name|unclassified|object|node|way)\b/i.test(name) ||
+    UNWANTED_PLACE_NAME.test(name) ||
+    PRICE_LIKE_PLACE_NAME.test(name)
   ) {
     return false;
   }
 
   return true;
+}
+
+function isValidWikimediaPhotoUrl(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' &&
+      /(?:^|\.)wikimedia\.org$/i.test(url.hostname) &&
+      WIKIMEDIA_IMAGE_EXTENSIONS.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function isUsableWikimediaImage(page, image) {
+  if (!image || !['image/jpeg', 'image/png', 'image/webp'].includes(image.mime)) {
+    return false;
+  }
+
+  const width = Number(image.width);
+  const height = Number(image.height);
+  const thumbnailWidth = Number(image.thumbwidth);
+  const thumbnailHeight = Number(image.thumbheight);
+  const aspectRatio = width / height;
+  const description = [
+    page.title,
+    image.extmetadata?.ObjectName?.value,
+    image.extmetadata?.ImageDescription?.value,
+  ].filter(Boolean).join(' ').replace(/<[^>]*>/g, ' ');
+
+  return isValidWikimediaPhotoUrl(image.thumburl) &&
+    width >= 400 &&
+    height >= 400 &&
+    thumbnailWidth >= 400 &&
+    thumbnailHeight >= 300 &&
+    aspectRatio >= 0.55 &&
+    aspectRatio <= 2.2 &&
+    !UNWANTED_PHOTO_CONTENT.test(description);
+}
+
+async function findWikimediaPhoto(searchQuery) {
+  const response = await axios.get(WIKIMEDIA_API_URL, {
+    params: {
+      action: 'query',
+      generator: 'search',
+      gsrsearch: searchQuery,
+      gsrnamespace: 6,
+      gsrlimit: 8,
+      prop: 'imageinfo',
+      iiprop: 'url|size|mime|extmetadata',
+      iiurlwidth: 800,
+      format: 'json',
+    },
+    headers: { 'User-Agent': 'Kelana itinerary planner' },
+    timeout: 2500,
+  });
+  const pages = Object.values(response.data.query?.pages || {})
+    .sort((left, right) => left.index - right.index);
+  const match = pages.find(page =>
+    isUsableWikimediaImage(page, page.imageinfo?.[0]));
+
+  return match?.imageinfo?.[0]?.thumburl || null;
+}
+
+export async function fetchRealPlacePhoto(placeName, location) {
+  const primaryQuery = [placeName, location].filter(Boolean).join(' ').trim();
+  const fallbackQuery = location
+    ? `${location} tourism`
+    : String(placeName || '').trim();
+
+  for (const searchQuery of [...new Set([primaryQuery, fallbackQuery].filter(Boolean))]) {
+    try {
+      const photoUrl = await findWikimediaPhoto(searchQuery);
+      if (photoUrl) return photoUrl;
+    } catch (error) {
+      console.warn(
+        `[PlacesService] Wikimedia photo search failed for "${searchQuery}": ${error.message}`,
+      );
+    }
+  }
+
+  return null;
+}
+
+async function enrichPlacesWithPhotos(places, location) {
+  const results = await Promise.allSettled(places.map(async place => {
+    const photoUrl = isValidWikimediaPhotoUrl(place.photoUrl)
+      ? place.photoUrl
+      : await fetchRealPlacePhoto(place.name, location);
+
+    return { ...place, photoUrl: photoUrl || '' };
+  }));
+
+  return results.map((result, index) => {
+    if (result.status === 'fulfilled') return result.value;
+    console.error(
+      `[PlacesService] Could not enrich photo for "${places[index].name}": ${result.reason}`,
+    );
+    return {
+      ...places[index],
+      photoUrl: isValidWikimediaPhotoUrl(places[index].photoUrl)
+        ? places[index].photoUrl
+        : '',
+    };
+  });
 }
 
 function osmTagsForCategories(categories, budgetLevel) {
@@ -124,7 +235,10 @@ export async function searchPlaces(intent = {}) {
 
   if (config.mockMode === 'always') {
     console.log(`[PlacesService] Using mock places dataset for: ${location}`);
-    return getMockPlacesForLocation(location, categories, budget);
+    return enrichPlacesWithPhotos(
+      getMockPlacesForLocation(location, categories, budget),
+      location,
+    );
   }
 
   try {
@@ -140,7 +254,10 @@ export async function searchPlaces(intent = {}) {
     const coordinates = locationResponse.data.features?.[0]?.geometry?.coordinates;
     if (!Array.isArray(coordinates) || coordinates.length < 2) {
       console.warn('[PlacesService] Photon could not geocode the requested location, falling back to mock data');
-      return getMockPlacesForLocation(location, categories, budget);
+      return enrichPlacesWithPhotos(
+        getMockPlacesForLocation(location, categories, budget),
+        location,
+      );
     }
 
     const [longitude, latitude] = coordinates.map(Number);
@@ -169,12 +286,18 @@ export async function searchPlaces(intent = {}) {
 
     if (transformed.length === 0) {
       console.warn('[PlacesService] Photon returned no usable places, falling back to mock data');
-      return getMockPlacesForLocation(location, categories, budget);
+      return enrichPlacesWithPhotos(
+        getMockPlacesForLocation(location, categories, budget),
+        location,
+      );
     }
 
-    return transformed;
+    return enrichPlacesWithPhotos(transformed, location);
   } catch (error) {
     console.error('[PlacesService] Error calling Photon:', error.message);
-    return getMockPlacesForLocation(location, categories, budget);
+    return enrichPlacesWithPhotos(
+      getMockPlacesForLocation(location, categories, budget),
+      location,
+    );
   }
 }

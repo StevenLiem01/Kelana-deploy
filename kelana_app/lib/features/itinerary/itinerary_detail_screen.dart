@@ -160,6 +160,9 @@ class _ItineraryDetailScreenState extends ConsumerState<ItineraryDetailScreen> {
 
     final shareCode = itinerary.shareCode ??
         'KLN-${itinerary.id.hashCode.abs().toString().padLeft(6, '0').substring(0, 6)}';
+    final heroPhotoUrl = itinerary.places
+        .map((place) => place.photoUrl)
+        .firstWhere((photoUrl) => photoUrl.trim().isNotEmpty, orElse: () => '');
 
     return Scaffold(
       appBar: AppBar(
@@ -193,11 +196,16 @@ class _ItineraryDetailScreenState extends ConsumerState<ItineraryDetailScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (itinerary.places.isNotEmpty &&
-                      itinerary.places.first.photoUrl.isNotEmpty)
+                  if (heroPhotoUrl.isNotEmpty)
                     Image.network(
-                      itinerary.places.first.photoUrl,
+                      heroPhotoUrl,
                       fit: BoxFit.cover,
+                      alignment: Alignment.center,
+                      filterQuality: FilterQuality.medium,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return _itineraryHeroFallback();
+                      },
                       errorBuilder: (_, __, ___) => _itineraryHeroFallback(),
                     )
                   else

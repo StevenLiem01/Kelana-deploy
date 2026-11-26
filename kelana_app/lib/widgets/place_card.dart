@@ -55,10 +55,24 @@ class PlaceCard extends StatelessWidget {
                       ? Image.network(
                           place.photoUrl,
                           fit: BoxFit.cover,
+                          alignment: Alignment.center,
+                          filterQuality: FilterQuality.medium,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.grey.shade100,
+                              alignment: Alignment.center,
+                              child: Icon(
+                                Icons.landscape,
+                                color: Colors.grey.shade400,
+                                size: 28,
+                              ),
+                            );
+                          },
                           errorBuilder: (_, __, ___) => const Icon(
-                            Icons.landscape,
-                            color: Colors.grey,
+                            Icons.place,
                             size: 36,
+                            color: AppColors.primary,
                           ),
                         )
                       : const Icon(

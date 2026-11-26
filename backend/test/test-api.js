@@ -294,7 +294,15 @@ async function runTests() {
       isUsablePhotonName('C 2301') ||
       isUsablePhotonName('C 19271') ||
       !isUsablePhotonName('Tahu Gimbal Mas Rendra') ||
-      !isUsablePhotonName('7-Eleven')
+      !isUsablePhotonName('7-Eleven') ||
+      [
+        'SCAMERS here!',
+        'Free entrance',
+        'Tourist entrance',
+        'Fishfarm',
+        'Shadehouse',
+        'Place 200k',
+      ].some(name => isUsablePhotonName(name))
     ) {
       throw new Error('Photon place-name quality filtering failed');
     }
@@ -400,6 +408,25 @@ async function runTests() {
     }
     if (placesRes.body.data.some(place => !isUsablePhotonName(place.name))) {
       throw new Error('Search places returned an ambiguous or identifier-like name');
+    }
+
+    const baliPlacesRes = await request('POST', '/search-places', {
+      location: 'Bali',
+      categories: [],
+      budget: 0,
+    });
+    const baliPlaces = baliPlacesRes.body?.data || [];
+    if (
+      baliPlacesRes.status !== 200 ||
+      baliPlaces.length === 0 ||
+      baliPlaces.some(place =>
+        !place.photoUrl ||
+        !/^https:\/\/(?:[^/]+\.)?wikimedia\.org\//i.test(place.photoUrl) ||
+        !/\.(?:jpe?g|png|webp)(?:\?|$)/i.test(place.photoUrl)
+      ) ||
+      baliPlaces.some(place => /scamers here!/i.test(place.name))
+    ) {
+      throw new Error('Bali place search returned missing or invalid Wikimedia photos');
     }
 
     const missingLocationRes = await request('POST', '/search-places', { categories: ['Kuliner'] });
